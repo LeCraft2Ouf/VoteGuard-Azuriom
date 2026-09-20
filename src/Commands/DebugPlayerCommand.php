@@ -63,7 +63,7 @@ class DebugPlayerCommand extends Command
 
         foreach ($times as $time) {
             $at = Carbon::parse($time);
-            $gap = $prev ? (int) $at->diffInSeconds($prev) : null;
+            $gap = $prev ? (int) $at->diffInSeconds($prev, true) : null;
             $this->line('vote='.$at->toDateTimeString().' gap='.($gap ?? '—'));
             $prev = $at;
         }

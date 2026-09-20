@@ -174,7 +174,7 @@ class Detector
             $sniper = false;
 
             if (isset($lastBySite[$siteId])) {
-                $gap = (int) $vote->created_at->diffInSeconds($lastBySite[$siteId]);
+                $gap = (int) $vote->created_at->diffInSeconds($lastBySite[$siteId], true);
                 $sniper = $gap >= $expected && $gap <= $expected + $this->settings->sniperSeconds();
             }
 
@@ -289,7 +289,7 @@ class Detector
         foreach ($times as $time) {
             $at = Carbon::parse($time);
 
-            if ($lastVote === null || $at->diffInSeconds($lastVote) > 900) {
+            if ($lastVote === null || $at->diffInSeconds($lastVote, true) > 900) {
                 $sessions[] = $at;
             }
 
@@ -330,7 +330,7 @@ class Detector
         $intervals = [];
 
         for ($i = 1, $len = $timestamps->count(); $i < $len; $i++) {
-            $intervals[] = (int) Carbon::parse($timestamps[$i])->diffInSeconds(Carbon::parse($timestamps[$i - 1]));
+            $intervals[] = (int) Carbon::parse($timestamps[$i])->diffInSeconds(Carbon::parse($timestamps[$i - 1]), true);
         }
 
         if ($intervals === []) {
