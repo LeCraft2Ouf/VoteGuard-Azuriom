@@ -487,11 +487,11 @@ class Detector
 
     private function expectedDelay(?object $site): int
     {
-        if ($site !== null && isset($site->vote_reset_at) && $site->vote_reset_at !== null) {
+        $minutes = (int) ($site?->vote_delay ?? 90);
+
+        if ($site !== null && filled($site->vote_reset_at) && $minutes <= 0) {
             return 86400;
         }
-
-        $minutes = (int) ($site->vote_delay ?? 90);
 
         return max(60, $minutes * 60);
     }
