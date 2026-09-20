@@ -86,7 +86,7 @@ class VoteGuardServiceProvider extends BasePluginServiceProvider
 
     protected function schedule(Schedule $schedule): void
     {
-        $schedule->command('voteguard:scan --days=14 --limit=150')->dailyAt('04:20');
+        $schedule->command('voteguard:scan --days=60 --limit=400')->dailyAt('04:20');
     }
 
     /**

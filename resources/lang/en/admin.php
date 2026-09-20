@@ -21,7 +21,7 @@ return [
         'today' => 'Detections today',
     ],
     'scan' => [
-        'button' => 'Scan history (30 days)',
+        'button' => 'Scan history (60 days)',
         'help' => 'Reads existing votes (clock-like intervals, 24/7 voting). Nobody is punished.',
         'done' => 'Scan done: :scanned players, :flagged flagged.',
     ],
@@ -88,7 +88,7 @@ return [
         'min_votes' => 'Min votes for timing',
         'min_votes_info' => 'Votes on the same listing before judging the rhythm.',
         'stddev' => 'Max stddev (seconds)',
-        'stddev_info' => 'If gaps vary less than this (and match the cooldown), it looks like a clock. Default: 45 s.',
+        'stddev_info' => 'If gaps vary less than this (and match the cooldown), it looks like a clock. Default: 180 s (3 min).',
         'sniper' => 'Sniper window (seconds)',
         'sniper_info' => 'Repeated votes between cooldown end and +X seconds.',
         'ip_farm' => 'Distinct accounts / IP / 24h',

@@ -21,7 +21,7 @@ return [
         'today' => 'Détections aujourd\'hui',
     ],
     'scan' => [
-        'button' => 'Analyser l\'historique (30 j)',
+        'button' => 'Analyser l\'historique (60 j)',
         'help' => 'Parcourt les votes déjà enregistrés (rythme trop régulier, votes 24h/24). Ne bloque personne.',
         'done' => 'Analyse terminée : :scanned joueurs, :flagged signalés.',
     ],
@@ -88,7 +88,7 @@ return [
         'min_votes' => 'Votes mini pour le rythme',
         'min_votes_info' => 'Nombre de votes sur un même site avant de juger le rythme.',
         'stddev' => 'Écart-type max (secondes)',
-        'stddev_info' => 'Si les écarts entre votes varient de moins que ça (et collent au cooldown), c\'est une horloge. Défaut : 45 s.',
+        'stddev_info' => 'Si les écarts entre votes varient de moins que ça (et collent au cooldown), c\'est une horloge. Défaut : 180 s (3 min).',
         'sniper' => 'Fenêtre « sniper » (secondes)',
         'sniper_info' => 'Vote entre la fin du cooldown et +X secondes, de façon répétée.',
         'ip_farm' => 'Comptes distincts / IP / 24h',

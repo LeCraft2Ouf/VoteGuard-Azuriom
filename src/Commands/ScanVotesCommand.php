@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 class ScanVotesCommand extends Command
 {
     protected $signature = 'voteguard:scan
-                            {--days=30 : Nombre de jours d\'historique}
+                            {--days=60 : Nombre de jours d\'historique}
                             {--limit=0 : Limite de joueurs (0 = tous)}';
 
     protected $description = 'Analyse l\'historique des votes pour détecter les bots auto-vote';

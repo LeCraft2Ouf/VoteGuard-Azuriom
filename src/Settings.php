@@ -31,7 +31,7 @@ class Settings
 
     public function maxStddev(): int
     {
-        return max(5, $this->int('voteguard.stddev', 45));
+        return max(5, $this->int('voteguard.stddev', 180));
     }
 
     public function sniperSeconds(): int

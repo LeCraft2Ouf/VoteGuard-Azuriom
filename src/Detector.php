@@ -30,7 +30,7 @@ class Detector
         'thin_headers' => 15,
         'regular_interval' => 35,
         'cooldown_sniper' => 30,
-        'always_on' => 20,
+        'always_on' => 30,
         'ip_farm' => 20,
     ];
 
@@ -112,7 +112,7 @@ class Detector
     /**
      * @return array{scanned: int, flagged: int}
      */
-    public function scanRecent(int $days = 30, int $limit = 200): array
+    public function scanRecent(int $days = 60, int $limit = 400): array
     {
         if (! class_exists(Vote::class)) {
             return ['scanned' => 0, 'flagged' => 0];

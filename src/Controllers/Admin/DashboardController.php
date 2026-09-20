@@ -43,7 +43,7 @@ class DashboardController extends Controller
 
     public function scan(Detector $detector): RedirectResponse
     {
-        $result = $detector->scanRecent(30, 200);
+        $result = $detector->scanRecent(60, 400);
 
         ActionLog::log('voteguard.scan');
 
