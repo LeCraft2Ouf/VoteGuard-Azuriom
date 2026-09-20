@@ -23,6 +23,8 @@ return [
     'scan' => [
         'button' => 'Analyser l\'historique (60 j)',
         'help' => 'Parcourt les votes déjà enregistrés (rythme trop régulier, votes 24h/24). Ne bloque personne.',
+        'progress' => 'Analyse : :current / :total joueurs',
+        'error' => 'L\'analyse a échoué. Réessaie.',
         'done' => 'Analyse terminée : :scanned joueurs, :flagged signalés.',
     ],
     'search' => 'Pseudo',

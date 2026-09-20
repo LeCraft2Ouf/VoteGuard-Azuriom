@@ -7,6 +7,7 @@ use Azuriom\Models\ActionLog;
 use Azuriom\Plugin\VoteGuard\Detector;
 use Azuriom\Plugin\VoteGuard\Models\Detection;
 use Azuriom\Plugin\VoteGuard\Models\Suspect;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -41,15 +42,25 @@ class DashboardController extends Controller
         ]);
     }
 
-    public function scan(Detector $detector): RedirectResponse
+    public function scan(Request $request, Detector $detector): RedirectResponse|JsonResponse
     {
-        $result = $detector->scanRecent(60, 400);
+        $offset = max(0, (int) $request->input('offset', 0));
+        $ajax = $request->expectsJson() || $request->ajax();
+        $chunk = $ajax ? 20 : null;
 
-        ActionLog::log('voteguard.scan');
+        $result = $detector->scanRecent(60, 400, $offset, $chunk);
+
+        if ($offset === 0) {
+            ActionLog::log('voteguard.scan');
+        }
+
+        if ($ajax) {
+            return response()->json($result);
+        }
 
         return to_route('voteguard.admin.index')
             ->with('success', trans('voteguard::admin.scan.done', [
-                'scanned' => $result['scanned'],
+                'scanned' => $result['total'],
                 'flagged' => $result['flagged'],
             ]));
     }

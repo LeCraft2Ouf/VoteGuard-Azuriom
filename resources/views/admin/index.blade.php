@@ -3,6 +3,15 @@
 @section('title', trans('voteguard::admin.title'))
 
 @section('content')
+    @if (request()->filled('scan_total'))
+        <div class="alert alert-success">
+            {{ trans('voteguard::admin.scan.done', [
+                'scanned' => request('scan_total'),
+                'flagged' => request('scan_flagged', 0),
+            ]) }}
+        </div>
+    @endif
+
     <div class="row g-3 mb-4">
         <div class="col-md-3">
             <div class="card border-danger">
@@ -62,10 +71,11 @@
                 </div>
             </form>
 
-            <form method="POST" action="{{ route('voteguard.admin.scan') }}"
-                  onsubmit="return confirm(@json(trans('voteguard::admin.scan.help')))">
+            <form method="POST" action="{{ route('voteguard.admin.scan') }}" id="voteguard-scan-form">
                 @csrf
-                <button type="submit" class="btn btn-warning">{{ trans('voteguard::admin.scan.button') }}</button>
+                <button type="submit" class="btn btn-warning" id="voteguard-scan-btn">
+                    {{ trans('voteguard::admin.scan.button') }}
+                </button>
             </form>
         </div>
         <div class="card-footer text-muted small">
@@ -140,4 +150,96 @@
             </div>
         @endif
     </div>
+
+    <div id="voteguard-progress" class="d-none position-fixed top-0 start-0 w-100 h-100"
+         style="z-index: 1080; background: rgba(15, 18, 24, .55);">
+        <div class="d-flex h-100 align-items-center justify-content-center p-3">
+            <div class="card shadow" style="min-width: min(420px, 100%);">
+                <div class="card-body">
+                    <p class="mb-3" id="voteguard-progress-label">{{ trans('voteguard::admin.scan.progress', ['current' => 0, 'total' => 0]) }}</p>
+                    <div class="progress" style="height: 1.35rem;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" id="voteguard-progress-bar"
+                             role="progressbar" style="width: 0%">0%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 @endsection
+
+@push('footer-scripts')
+    <script>
+        (function () {
+            const form = document.getElementById('voteguard-scan-form');
+            const button = document.getElementById('voteguard-scan-btn');
+            const overlay = document.getElementById('voteguard-progress');
+            const label = document.getElementById('voteguard-progress-label');
+            const bar = document.getElementById('voteguard-progress-bar');
+
+            if (!form || !button || !overlay) {
+                return;
+            }
+
+            const progressTpl = @json(trans('voteguard::admin.scan.progress', ['current' => '__C__', 'total' => '__T__']));
+            const errorMsg = @json(trans('voteguard::admin.scan.error'));
+            const indexUrl = @json(route('voteguard.admin.index'));
+            const token = form.querySelector('input[name="_token"]')?.value || '';
+
+            function setProgress(current, total) {
+                const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+                label.textContent = progressTpl.replace('__C__', String(current)).replace('__T__', String(total));
+                bar.style.width = pct + '%';
+                bar.textContent = pct + '%';
+            }
+
+            async function runScan() {
+                let offset = 0;
+                let flagged = 0;
+
+                while (true) {
+                    const response = await fetch(form.action, {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': token,
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: JSON.stringify({offset: offset})
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('scan');
+                    }
+
+                    const data = await response.json();
+                    offset = data.offset || 0;
+                    flagged += data.flagged || 0;
+                    setProgress(offset, data.total || 0);
+
+                    if (data.done) {
+                        const url = new URL(indexUrl, window.location.origin);
+                        url.searchParams.set('scan_total', String(data.total || 0));
+                        url.searchParams.set('scan_flagged', String(flagged));
+                        window.location.href = url.toString();
+                        return;
+                    }
+                }
+            }
+
+            form.addEventListener('submit', function (ev) {
+                ev.preventDefault();
+                button.disabled = true;
+                overlay.classList.remove('d-none');
+                setProgress(0, 0);
+
+                runScan().catch(function () {
+                    overlay.classList.add('d-none');
+                    button.disabled = false;
+                    alert(errorMsg);
+                });
+            });
+        })();
+    </script>
+@endpush

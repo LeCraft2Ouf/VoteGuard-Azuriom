@@ -112,12 +112,14 @@ class Detector
     }
 
     /**
-     * @return array{scanned: int, flagged: int}
+     * @return array{scanned: int, flagged: int, offset: int, total: int, done: bool}
      */
-    public function scanRecent(int $days = 60, int $limit = 400): array
+    public function scanRecent(int $days = 60, int $limit = 400, int $offset = 0, ?int $chunk = null): array
     {
+        $empty = ['scanned' => 0, 'flagged' => 0, 'offset' => 0, 'total' => 0, 'done' => true];
+
         if (! class_exists(Vote::class)) {
-            return ['scanned' => 0, 'flagged' => 0];
+            return $empty;
         }
 
         $query = Vote::query()
@@ -131,18 +133,28 @@ class Detector
             $query->limit($limit);
         }
 
-        $userIds = $query->pluck('user_id');
+        $userIds = $query->pluck('user_id')->values();
+        $total = $userIds->count();
+        $slice = $chunk === null
+            ? $userIds->slice($offset)
+            : $userIds->slice($offset, $chunk);
+
         $flagged = 0;
 
-        foreach ($userIds as $userId) {
+        foreach ($slice as $userId) {
             if ($this->analyzeUser((int) $userId) >= $this->settings->watchScore()) {
                 $flagged++;
             }
         }
 
+        $processed = $offset + $slice->count();
+
         return [
-            'scanned' => $userIds->count(),
+            'scanned' => $slice->count(),
             'flagged' => $flagged,
+            'offset' => $processed,
+            'total' => $total,
+            'done' => $processed >= $total,
         ];
     }
 

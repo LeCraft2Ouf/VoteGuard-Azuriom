@@ -23,6 +23,8 @@ return [
     'scan' => [
         'button' => 'Scan history (60 days)',
         'help' => 'Reads existing votes (clock-like intervals, 24/7 voting). Nobody is punished.',
+        'progress' => 'Scan: :current / :total players',
+        'error' => 'Scan failed. Try again.',
         'done' => 'Scan done: :scanned players, :flagged flagged.',
     ],
     'search' => 'Username',
