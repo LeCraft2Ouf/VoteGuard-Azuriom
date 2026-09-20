@@ -24,7 +24,7 @@ class SuspectController extends Controller
         return view('voteguard::admin.show', [
             'suspect' => $suspect,
             'detections' => $detections,
-            'intervals' => $detector->intervalRows($suspect->user_id),
+            'intervals' => $detector->intervalRows($suspect->user_id, 50),
         ]);
     }
 

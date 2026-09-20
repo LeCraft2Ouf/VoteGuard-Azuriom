@@ -197,11 +197,15 @@ class Detector
             $rows[] = [
                 'site' => $vote->site->name ?? '#'.$siteId,
                 'at' => $vote->created_at,
+                'at_label' => $vote->created_at->format('d/m/Y H:i:s'),
                 'gap' => $gap,
                 'gap_label' => $gap === null ? '—' : $this->formatDuration($gap),
                 'expected' => $expected,
                 'expected_label' => $this->formatDuration($expected),
                 'delta' => $gap === null ? null : $gap - $expected,
+                'delta_label' => $gap === null
+                    ? '—'
+                    : (($gap - $expected >= 0 ? '+' : '−').$this->formatDuration(abs($gap - $expected))),
                 'sniper' => $sniper,
             ];
 

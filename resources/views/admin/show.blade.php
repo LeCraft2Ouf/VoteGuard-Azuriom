@@ -14,7 +14,7 @@
             <div class="card h-100">
                 <div class="card-header">{{ trans('voteguard::admin.show.intervals') }}</div>
                 <div class="table-responsive">
-                    <table class="table table-sm mb-0">
+                    <table class="table mb-0">
                         <thead>
                         <tr>
                             <th>{{ trans('voteguard::admin.fields.date') }}</th>
@@ -27,17 +27,11 @@
                         <tbody>
                         @forelse ($intervals as $row)
                             <tr class="{{ $row['sniper'] ? 'table-danger' : '' }}">
-                                <td>{{ format_date_compact($row['at']) }}</td>
-                                <td>{{ $row['site'] }}</td>
-                                <td>{{ $row['gap_label'] }}</td>
-                                <td>{{ $row['expected_label'] }}</td>
-                                <td>
-                                    @if ($row['delta'] === null)
-                                        —
-                                    @else
-                                        {{ $row['delta'] >= 0 ? '+' : '' }}{{ $row['delta'] }} s
-                                    @endif
-                                </td>
+                                <td class="text-nowrap fs-6">{{ $row['at_label'] ?? format_date_compact($row['at']) }}</td>
+                                <td class="fs-6">{{ $row['site'] }}</td>
+                                <td class="fs-6 text-nowrap">{{ $row['gap_label'] }}</td>
+                                <td class="fs-6 text-nowrap">{{ $row['expected_label'] }}</td>
+                                <td class="fs-6 text-nowrap fw-semibold">{{ $row['delta_label'] ?? '—' }}</td>
                             </tr>
                         @empty
                             <tr>
