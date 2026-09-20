@@ -1,0 +1,11 @@
+{
+    "name": "azuriom/voteguard",
+    "type": "azuriom-plugin",
+    "description": "Detect auto-vote bots on Azuriom Vote",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Azuriom\\Plugin\\VoteGuard\\": "src/"
+        }
+    }
+}

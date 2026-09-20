@@ -1,0 +1,62 @@
+<?php
+
+namespace Azuriom\Plugin\VoteGuard\Middleware;
+
+use Azuriom\Plugin\VoteGuard\VoteContext;
+use Closure;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Symfony\Component\HttpFoundation\Response;
+
+class CaptureVoteRequest
+{
+    public function __construct(
+        private VoteContext $context,
+    ) {}
+
+    /**
+     * @param  Closure(Request): Response  $next
+     */
+    public function handle(Request $request, Closure $next): Response
+    {
+        if ($this->isVoteDone($request)) {
+            $this->capture($request);
+        }
+
+        return $next($request);
+    }
+
+    private function isVoteDone(Request $request): bool
+    {
+        if (! $request->isMethod('POST')) {
+            return false;
+        }
+
+        if ($request->routeIs('vote.done')) {
+            return true;
+        }
+
+        $path = $request->path();
+
+        return str_starts_with($path, 'vote/site/') && str_ends_with($path, '/done');
+    }
+
+    private function capture(Request $request): void
+    {
+        $this->context->fromVoteDone = true;
+        $this->context->ip = $request->ip();
+        $this->context->userAgent = $request->userAgent();
+        $this->context->acceptLanguage = $request->header('Accept-Language');
+        $this->context->accept = $request->header('Accept');
+        $this->context->token = $request->header('X-VoteGuard-Token')
+            ?: $request->input('voteguard_token');
+
+        if (is_string($this->context->token) && strlen($this->context->token) === 32) {
+            $session = Cache::get('voteguard.'.$this->context->token);
+
+            if (is_array($session)) {
+                $this->context->session = $session;
+            }
+        }
+    }
+}
