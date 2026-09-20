@@ -51,7 +51,7 @@ class CaptureVoteRequest
         $this->context->token = $request->header('X-VoteGuard-Token')
             ?: $request->input('voteguard_token');
 
-        if (is_string($this->context->token) && strlen($this->context->token) === 32) {
+        if (is_string($this->context->token) && preg_match('/^[a-f0-9]{32}$/', $this->context->token) === 1) {
             $session = Cache::get('voteguard.'.$this->context->token);
 
             if (is_array($session)) {

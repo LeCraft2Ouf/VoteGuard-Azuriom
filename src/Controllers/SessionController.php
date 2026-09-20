@@ -29,7 +29,7 @@ class SessionController extends Controller
     public function click(Request $request): JsonResponse
     {
         $data = $this->validate($request, [
-            'token' => ['required', 'string', 'size:32'],
+            'token' => ['required', 'string', 'regex:/^[a-f0-9]{32}$/'],
             'site' => ['nullable', 'integer'],
             'pointer' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'page_ms' => ['nullable', 'integer', 'min:0', 'max:86400000'],

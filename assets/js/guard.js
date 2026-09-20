@@ -38,6 +38,12 @@
         }
 
         window.axios.interceptors.request.use(function (config) {
+            var url = String(config.url || '');
+
+            if (url.indexOf('/vote/site/') === -1 || url.indexOf('/done') === -1) {
+                return config;
+            }
+
             config.headers = config.headers || {};
             config.headers['X-VoteGuard-Token'] = state.token;
 
