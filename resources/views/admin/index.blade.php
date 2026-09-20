@@ -71,8 +71,18 @@
                 </div>
             </form>
 
-            <form method="POST" action="{{ route('voteguard.admin.scan') }}" id="voteguard-scan-form">
+            <form method="POST" action="{{ route('voteguard.admin.scan') }}" id="voteguard-scan-form" class="d-flex flex-wrap gap-2 align-items-end">
                 @csrf
+                <div>
+                    <label class="form-label" for="scan-from">{{ trans('voteguard::admin.scan.from') }}</label>
+                    <input type="date" class="form-control" id="scan-from" name="from" required
+                           value="{{ $scanFrom }}">
+                </div>
+                <div>
+                    <label class="form-label" for="scan-to">{{ trans('voteguard::admin.scan.to') }}</label>
+                    <input type="date" class="form-control" id="scan-to" name="to" required
+                           value="{{ $scanTo }}">
+                </div>
                 <button type="submit" class="btn btn-warning" id="voteguard-scan-btn">
                     {{ trans('voteguard::admin.scan.button') }}
                 </button>
@@ -208,7 +218,11 @@
                             'X-CSRF-TOKEN': token,
                             'X-Requested-With': 'XMLHttpRequest'
                         },
-                        body: JSON.stringify({offset: offset})
+                        body: JSON.stringify({
+                            offset: offset,
+                            from: form.querySelector('[name="from"]').value,
+                            to: form.querySelector('[name="to"]').value
+                        })
                     });
 
                     if (!response.ok) {
@@ -224,6 +238,8 @@
                         const url = new URL(indexUrl, window.location.origin);
                         url.searchParams.set('scan_total', String(data.total || 0));
                         url.searchParams.set('scan_flagged', String(flagged));
+                        url.searchParams.set('from', form.querySelector('[name="from"]').value);
+                        url.searchParams.set('to', form.querySelector('[name="to"]').value);
                         window.location.href = url.toString();
                         return;
                     }

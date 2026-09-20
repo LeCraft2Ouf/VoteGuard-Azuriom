@@ -7,6 +7,7 @@ use Azuriom\Models\ActionLog;
 use Azuriom\Plugin\VoteGuard\Detector;
 use Azuriom\Plugin\VoteGuard\Models\Detection;
 use Azuriom\Plugin\VoteGuard\Models\Suspect;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -34,6 +35,8 @@ class DashboardController extends Controller
         return view('voteguard::admin.index', [
             'search' => $search,
             'status' => $status,
+            'scanFrom' => $request->input('from', now()->subDays(60)->toDateString()),
+            'scanTo' => $request->input('to', now()->toDateString()),
             'suspects' => $suspects,
             'countLikely' => Suspect::query()->where('status', 'likely')->count(),
             'countSuspect' => Suspect::query()->where('status', 'suspect')->count(),
@@ -44,11 +47,28 @@ class DashboardController extends Controller
 
     public function scan(Request $request, Detector $detector): RedirectResponse|JsonResponse
     {
-        $offset = max(0, (int) $request->input('offset', 0));
+        $validated = $this->validate($request, [
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date'],
+            'offset' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        $from = Carbon::parse($validated['from'] ?? now()->subDays(60)->toDateString())->startOfDay();
+        $to = Carbon::parse($validated['to'] ?? now()->toDateString())->endOfDay();
+
+        if ($from->greaterThan($to)) {
+            [$from, $to] = [$to->copy()->startOfDay(), $from->copy()->endOfDay()];
+        }
+
+        if ($from->diffInDays($to, true) > 366) {
+            $from = $to->copy()->subDays(366)->startOfDay();
+        }
+
+        $offset = max(0, (int) ($validated['offset'] ?? 0));
         $ajax = $request->expectsJson() || $request->ajax();
         $chunk = $ajax ? 20 : null;
 
-        $result = $detector->scanRecent(60, 400, $offset, $chunk);
+        $result = $detector->scanRecent(60, 0, $offset, $chunk, $from, $to);
 
         if ($offset === 0) {
             ActionLog::log('voteguard.scan');

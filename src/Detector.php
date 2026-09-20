@@ -79,7 +79,7 @@ class Detector
         $this->notify($user, $score, $flags);
     }
 
-    public function analyzeUser(int $userId): int
+    public function analyzeUser(int $userId, ?Carbon $from = null, ?Carbon $to = null): int
     {
         $user = User::find($userId);
 
@@ -87,16 +87,18 @@ class Detector
             return 0;
         }
 
+        [$from, $to] = $this->period($from, $to);
+
         $siteIds = Vote::query()
             ->where('user_id', $userId)
-            ->where('created_at', '>=', now()->subDays(60))
+            ->whereBetween('created_at', [$from, $to])
             ->distinct()
             ->pluck('site_id');
 
-        $flags = $this->sessionFlags($userId);
+        $flags = $this->sessionFlags($userId, $from, $to);
 
         foreach ($siteIds as $siteId) {
-            $flags = array_merge($flags, $this->patternFlags($userId, (int) $siteId));
+            $flags = array_merge($flags, $this->patternFlags($userId, (int) $siteId, $from, $to));
         }
 
         $flags = array_values(array_unique($flags));
@@ -114,7 +116,7 @@ class Detector
     /**
      * @return array{scanned: int, flagged: int, offset: int, total: int, done: bool}
      */
-    public function scanRecent(int $days = 60, int $limit = 400, int $offset = 0, ?int $chunk = null): array
+    public function scanRecent(int $days = 60, int $limit = 400, int $offset = 0, ?int $chunk = null, ?Carbon $from = null, ?Carbon $to = null): array
     {
         $empty = ['scanned' => 0, 'flagged' => 0, 'offset' => 0, 'total' => 0, 'done' => true];
 
@@ -122,9 +124,11 @@ class Detector
             return $empty;
         }
 
+        [$from, $to] = $this->period($from ?? now()->subDays($days), $to ?? now());
+
         $query = Vote::query()
             ->select('user_id', DB::raw('COUNT(*) as vote_count'))
-            ->where('created_at', '>=', now()->subDays($days))
+            ->whereBetween('created_at', [$from, $to])
             ->groupBy('user_id')
             ->havingRaw('COUNT(*) >= ?', [$this->settings->minVotes()])
             ->orderByDesc('vote_count');
@@ -142,7 +146,7 @@ class Detector
         $flagged = 0;
 
         foreach ($slice as $userId) {
-            if ($this->analyzeUser((int) $userId) >= $this->settings->watchScore()) {
+            if ($this->analyzeUser((int) $userId, $from, $to) >= $this->settings->watchScore()) {
                 $flagged++;
             }
         }
@@ -259,20 +263,20 @@ class Detector
     /**
      * @return list<string>
      */
-    private function patternFlags(int $userId, ?int $siteId): array
+    private function patternFlags(int $userId, ?int $siteId, ?Carbon $from = null, ?Carbon $to = null): array
     {
         if ($siteId === null || ! class_exists(Vote::class)) {
             return [];
         }
 
+        [$from, $to] = $this->period($from, $to);
+
         $votes = Vote::query()
             ->where('user_id', $userId)
             ->where('site_id', $siteId)
-            ->where('created_at', '>=', now()->subDays(60))
-            ->latest()
-            ->limit(80)
+            ->whereBetween('created_at', [$from, $to])
+            ->orderBy('created_at')
             ->pluck('created_at')
-            ->reverse()
             ->values();
 
         $site = class_exists(Site::class) ? Site::find($siteId) : null;
@@ -283,15 +287,17 @@ class Detector
     /**
      * @return list<string>
      */
-    private function sessionFlags(int $userId): array
+    private function sessionFlags(int $userId, ?Carbon $from = null, ?Carbon $to = null): array
     {
         if (! class_exists(Vote::class)) {
             return [];
         }
 
+        [$from, $to] = $this->period($from, $to);
+
         $times = Vote::query()
             ->where('user_id', $userId)
-            ->where('created_at', '>=', now()->subDays(60))
+            ->whereBetween('created_at', [$from, $to])
             ->orderBy('created_at')
             ->pluck('created_at');
 
@@ -313,7 +319,7 @@ class Detector
         if (class_exists(Site::class)) {
             $siteIds = Vote::query()
                 ->where('user_id', $userId)
-                ->where('created_at', '>=', now()->subDays(60))
+                ->whereBetween('created_at', [$from, $to])
                 ->distinct()
                 ->pluck('site_id');
 
@@ -495,6 +501,17 @@ class Detector
                 //
             }
         })->afterResponse();
+    }
+
+    /**
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    private function period(?Carbon $from, ?Carbon $to): array
+    {
+        $from ??= now()->subDays(60);
+        $to ??= now();
+
+        return [$from->copy()->startOfDay(), $to->copy()->endOfDay()];
     }
 
     private function expectedDelay(?object $site): int
