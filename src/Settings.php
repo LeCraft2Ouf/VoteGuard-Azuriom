@@ -26,17 +26,17 @@ class Settings
 
     public function minVotes(): int
     {
-        return max(4, $this->int('voteguard.min_votes', 8));
+        return max(4, $this->int('voteguard.min_votes', 6));
     }
 
     public function maxStddev(): int
     {
-        return max(5, $this->int('voteguard.stddev', 180));
+        return max(5, $this->int('voteguard.stddev', 300));
     }
 
     public function sniperSeconds(): int
     {
-        return max(5, $this->int('voteguard.sniper', 25));
+        return max(5, $this->int('voteguard.sniper', 180));
     }
 
     public function ipFarmUsers(): int

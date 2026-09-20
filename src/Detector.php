@@ -54,6 +54,7 @@ class Detector
         $flags = array_merge(
             $this->requestFlags($vote),
             $this->patternFlags($user->id, $vote->site_id),
+            $this->sessionFlags($user->id),
             $this->ipFarmFlags($user->id),
         );
 
@@ -88,10 +89,11 @@ class Detector
 
         $siteIds = Vote::query()
             ->where('user_id', $userId)
+            ->where('created_at', '>=', now()->subDays(60))
             ->distinct()
             ->pluck('site_id');
 
-        $flags = [];
+        $flags = $this->sessionFlags($userId);
 
         foreach ($siteIds as $siteId) {
             $flags = array_merge($flags, $this->patternFlags($userId, (int) $siteId));
@@ -254,61 +256,119 @@ class Detector
         $votes = Vote::query()
             ->where('user_id', $userId)
             ->where('site_id', $siteId)
-            ->orderBy('created_at')
-            ->limit(40)
-            ->pluck('created_at');
+            ->where('created_at', '>=', now()->subDays(60))
+            ->latest()
+            ->limit(80)
+            ->pluck('created_at')
+            ->reverse()
+            ->values();
 
-        $min = $this->settings->minVotes();
+        $site = class_exists(Site::class) ? Site::find($siteId) : null;
 
-        if ($votes->count() < $min) {
+        return $this->flagsFromTimestamps($votes, $this->expectedDelay($site));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function sessionFlags(int $userId): array
+    {
+        if (! class_exists(Vote::class)) {
             return [];
         }
 
-        $site = class_exists(Site::class) ? Site::find($siteId) : null;
-        $expected = $this->expectedDelay($site);
+        $times = Vote::query()
+            ->where('user_id', $userId)
+            ->where('created_at', '>=', now()->subDays(60))
+            ->orderBy('created_at')
+            ->pluck('created_at');
+
+        $sessions = [];
+        $lastVote = null;
+
+        foreach ($times as $time) {
+            $at = Carbon::parse($time);
+
+            if ($lastVote === null || $at->diffInSeconds($lastVote) > 900) {
+                $sessions[] = $at;
+            }
+
+            $lastVote = $at;
+        }
+
+        $minDelay = 90;
+
+        if (class_exists(Site::class)) {
+            $siteIds = Vote::query()
+                ->where('user_id', $userId)
+                ->where('created_at', '>=', now()->subDays(60))
+                ->distinct()
+                ->pluck('site_id');
+
+            $fromSites = Site::query()->whereIn('id', $siteIds)->min('vote_delay');
+
+            if ($fromSites) {
+                $minDelay = (int) $fromSites;
+            }
+        }
+
+        return $this->flagsFromTimestamps(collect($sessions), max(60, $minDelay * 60));
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, mixed>  $timestamps
+     * @return list<string>
+     */
+    private function flagsFromTimestamps($timestamps, int $expected): array
+    {
+        $min = $this->settings->minVotes();
+
+        if ($timestamps->count() < $min) {
+            return [];
+        }
 
         $intervals = [];
 
-        for ($i = 1, $len = $votes->count(); $i < $len; $i++) {
-            $intervals[] = (int) Carbon::parse($votes[$i])->diffInSeconds(Carbon::parse($votes[$i - 1]));
+        for ($i = 1, $len = $timestamps->count(); $i < $len; $i++) {
+            $intervals[] = (int) Carbon::parse($timestamps[$i])->diffInSeconds(Carbon::parse($timestamps[$i - 1]));
         }
 
-        $flags = [];
-        $low = (int) ($expected * 0.90);
-        $high = (int) ($expected * 1.12);
+        if ($intervals === []) {
+            return [];
+        }
+
+        $low = (int) ($expected * 0.92);
+        $high = (int) ($expected * 1.25);
         $near = array_values(array_filter($intervals, fn (int $gap) => $gap >= $low && $gap <= $high));
+        $flags = [];
+        $ratio = count($near) / count($intervals);
 
-        if (count($near) >= $min - 1) {
-            $stddev = $this->stddev($near);
-
-            if ($stddev <= $this->settings->maxStddev()) {
-                $flags[] = 'regular_interval';
-            }
-
-            $sniperLimit = $expected + $this->settings->sniperSeconds();
-            $snipers = array_filter($near, fn (int $gap) => $gap >= $expected && $gap <= $sniperLimit);
-
-            if (count($snipers) >= $min - 1) {
-                $flags[] = 'cooldown_sniper';
-            }
+        if (count($near) >= $min - 1 && $ratio >= 0.40) {
+            $flags[] = 'regular_interval';
         }
 
-        $recent = $votes->slice(-16)->values();
+        if (count($near) >= $min - 1 && $this->stddev($near) <= $this->settings->maxStddev()) {
+            $flags[] = 'regular_interval';
+        }
 
-        if ($recent->count() >= 12) {
-            $span = (int) Carbon::parse($recent->last())->diffInSeconds(Carbon::parse($recent->first()));
-            $maxGap = 0;
+        $sniperLimit = $expected + $this->settings->sniperSeconds();
+        $snipers = array_values(array_filter($near, fn (int $gap) => $gap >= $expected && $gap <= $sniperLimit));
 
-            for ($i = 1, $len = $recent->count(); $i < $len; $i++) {
-                $maxGap = max($maxGap, (int) Carbon::parse($recent[$i])->diffInSeconds(Carbon::parse($recent[$i - 1])));
-            }
+        if (count($snipers) >= $min - 1) {
+            $flags[] = 'cooldown_sniper';
+        }
 
-            if ($span >= 16 * 3600 && $maxGap <= (int) ($expected * 1.4)) {
+        $awake = array_values(array_filter($intervals, fn (int $gap) => $gap <= (int) ($expected * 2.2)));
+
+        if (count($awake) >= 10) {
+            $span = array_sum(array_slice($awake, -12));
+
+            if ($span >= 10 * 3600 && $span <= 20 * 3600) {
                 $flags[] = 'always_on';
             }
         }
 
-        return $flags;
+        return array_values(array_unique($flags));
     }
 
     /**
