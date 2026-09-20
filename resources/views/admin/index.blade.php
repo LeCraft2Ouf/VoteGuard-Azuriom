@@ -122,10 +122,12 @@
                                 {{ trans('voteguard::admin.status.'.$suspect->status) }}
                             </span>
                         </td>
-                        <td class="small">
-                            @foreach (($suspect->last_flags ?? []) as $flag)
-                                <span class="badge text-bg-light text-dark">{{ trans('voteguard::admin.flags.'.$flag) }}</span>
-                            @endforeach
+                        <td>
+                            <div class="d-flex flex-wrap gap-2">
+                                @foreach (($suspect->last_flags ?? []) as $flag)
+                                    <span class="badge text-bg-light text-dark fs-6 fw-normal px-3 py-2">{{ trans('voteguard::admin.flags.'.$flag) }}</span>
+                                @endforeach
+                            </div>
                         </td>
                         <td>{{ format_date_compact($suspect->updated_at) }}</td>
                         <td>

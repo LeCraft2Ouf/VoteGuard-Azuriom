@@ -131,10 +131,12 @@
                     <tr>
                         <td>{{ format_date_compact($detection->created_at) }}</td>
                         <td>{{ $detection->score }}</td>
-                        <td class="small">
-                            @foreach (($detection->flags ?? []) as $flag)
-                                <span class="badge text-bg-light text-dark">{{ trans('voteguard::admin.flags.'.$flag) }}</span>
-                            @endforeach
+                        <td>
+                            <div class="d-flex flex-wrap gap-2">
+                                @foreach (($detection->flags ?? []) as $flag)
+                                    <span class="badge text-bg-light text-dark fs-6 fw-normal px-3 py-2">{{ trans('voteguard::admin.flags.'.$flag) }}</span>
+                                @endforeach
+                            </div>
                         </td>
                         <td class="small">{{ $detection->ip ?? '—' }}</td>
                         <td>{{ trans('voteguard::admin.sources.'.$detection->source) }}</td>
