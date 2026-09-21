@@ -18,6 +18,7 @@ return [
     'stats' => [
         'likely' => 'Likely bots',
         'suspect' => 'Suspects',
+        'clear' => 'Clear',
         'watch' => 'Watch list',
         'today' => 'Detections today',
         'blocked' => 'Votes blocked',

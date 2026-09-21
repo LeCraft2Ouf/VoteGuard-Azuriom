@@ -52,7 +52,7 @@ class SuspectController extends Controller
             [
                 'score' => 0,
                 'max_score' => 0,
-                'status' => 'watch',
+                'status' => 'clear',
                 'blocked' => false,
             ]
         );
@@ -63,7 +63,7 @@ class SuspectController extends Controller
     public function update(Request $request, Suspect $suspect, Blocklist $blocklist): RedirectResponse
     {
         $validated = $this->validate($request, [
-            'status' => ['required', Rule::in(['watch', 'suspect', 'likely', 'confirmed', 'false_positive'])],
+            'status' => ['required', Rule::in(['clear', 'watch', 'suspect', 'likely', 'confirmed', 'false_positive'])],
             'note' => ['nullable', 'string', 'max:2000'],
         ]);
 

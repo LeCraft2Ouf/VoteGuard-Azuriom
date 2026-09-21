@@ -21,9 +21,10 @@
             ['key' => 'likely', 'count' => $countLikely, 'border' => 'border-danger'],
             ['key' => 'suspect', 'count' => $countSuspect, 'border' => 'border-warning'],
             ['key' => 'watch', 'count' => $countWatch, 'border' => ''],
+            ['key' => 'clear', 'count' => $countClear, 'border' => 'border-success'],
             ['key' => 'blocked', 'count' => $countBlocked, 'border' => 'border-dark'],
         ] as $stat)
-            <div class="col-md-3">
+            <div class="col-6 col-xl">
                 <a href="{{ route('voteguard.admin.index', array_filter(['status' => $status === $stat['key'] ? null : $stat['key'], 'search' => $search])) }}"
                    class="vg-stat {{ $status === $stat['key'] ? 'is-active' : '' }}">
                     <div class="card {{ $stat['border'] }}">
@@ -52,7 +53,7 @@
                             <label class="form-label" for="status">{{ trans('voteguard::admin.fields.status') }}</label>
                             <select class="form-select" id="status" name="status">
                                 <option value="">{{ trans('voteguard::admin.all_status') }}</option>
-                                @foreach (['watch', 'suspect', 'likely', 'confirmed', 'blocked', 'false_positive'] as $key)
+                                @foreach (['clear', 'watch', 'suspect', 'likely', 'confirmed', 'blocked', 'false_positive'] as $key)
                                     <option value="{{ $key }}" @selected($status === $key)>
                                         {{ trans('voteguard::admin.status.'.$key) }}
                                     </option>

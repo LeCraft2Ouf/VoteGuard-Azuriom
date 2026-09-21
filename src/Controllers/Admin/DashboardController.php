@@ -53,6 +53,7 @@ class DashboardController extends Controller
             'countLikely' => Suspect::query()->where('status', 'likely')->count(),
             'countSuspect' => Suspect::query()->where('status', 'suspect')->count(),
             'countWatch' => Suspect::query()->where('status', 'watch')->count(),
+            'countClear' => Suspect::query()->where('status', 'clear')->count(),
             'countBlocked' => Suspect::query()->where('blocked', true)->count(),
             'unlisted' => $unlisted,
         ]);

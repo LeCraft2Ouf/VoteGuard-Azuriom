@@ -18,6 +18,7 @@ return [
     'stats' => [
         'likely' => 'Bot probable',
         'suspect' => 'Suspects',
+        'clear' => 'RAS',
         'watch' => 'À surveiller',
         'today' => 'Détections aujourd\'hui',
         'blocked' => 'Votes bloqués',

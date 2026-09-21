@@ -3,7 +3,8 @@
     $badge = match ($key) {
         'likely', 'confirmed' => 'danger',
         'suspect' => 'warning',
-        'false_positive', 'clear' => 'secondary',
+        'clear' => 'success',
+        'false_positive' => 'secondary',
         default => 'info',
     };
 @endphp

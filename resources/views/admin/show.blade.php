@@ -135,7 +135,7 @@
                             <div class="mb-3">
                                 <label class="form-label" for="status">{{ trans('voteguard::admin.fields.status') }}</label>
                                 <select class="form-select" id="status" name="status">
-                                    @foreach (['watch', 'suspect', 'likely', 'confirmed', 'false_positive'] as $key)
+                                    @foreach (['clear', 'watch', 'suspect', 'likely', 'confirmed', 'false_positive'] as $key)
                                         <option value="{{ $key }}" @selected($suspect->status === $key)>
                                             {{ trans('voteguard::admin.status.'.$key) }}
                                         </option>
