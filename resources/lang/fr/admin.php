@@ -25,7 +25,7 @@ return [
         'button' => 'Analyser',
         'from' => 'Du',
         'to' => 'Au',
-        'help' => 'Parcourt les votes entre les deux dates (rythme trop régulier, votes 24h/24). Ne bloque personne.',
+        'help' => 'Parcourt les votes entre les deux dates et met à jour toute la liste. Ne bloque personne. Préfère ~60 jours : une période trop courte durcit les scores.',
         'progress' => 'Analyse : :current / :total joueurs',
         'error' => 'L\'analyse a échoué. Réessaie.',
         'done' => 'Analyse terminée : :scanned joueurs, :flagged signalés.',

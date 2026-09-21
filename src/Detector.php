@@ -90,7 +90,13 @@ class Detector
     {
         $user = User::find($userId);
 
-        if ($user === null || $this->settings->isWhitelisted($user->name)) {
+        if ($user === null) {
+            return 0;
+        }
+
+        if ($this->settings->isWhitelisted($user->name)) {
+            $this->downgradeExisting($user, 0, []);
+
             return 0;
         }
 
@@ -136,6 +142,13 @@ class Detector
         }
 
         $userIds = $query->pluck('user_id')->values();
+
+        $extraIds = Suspect::query()
+            ->whereNotIn('status', ['confirmed', 'false_positive'])
+            ->whereNotIn('user_id', $userIds)
+            ->pluck('user_id');
+
+        $userIds = $userIds->concat($extraIds)->values();
         $total = $userIds->count();
         $slice = $chunk === null
             ? $userIds->slice($offset)

@@ -25,7 +25,7 @@ return [
         'button' => 'Analyze',
         'from' => 'From',
         'to' => 'To',
-        'help' => 'Reads votes between the two dates (clock-like intervals, 24/7 voting). Nobody is punished.',
+        'help' => 'Reads votes between the two dates and refreshes the whole list. Nobody is punished. Prefer ~60 days: a short range makes scores harsher.',
         'progress' => 'Scan: :current / :total players',
         'error' => 'Scan failed. Try again.',
         'done' => 'Scan done: :scanned players, :flagged flagged.',
