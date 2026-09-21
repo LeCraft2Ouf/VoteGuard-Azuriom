@@ -74,14 +74,24 @@ class DashboardController extends Controller
             ActionLog::log('voteguard.scan');
         }
 
+        if ($result['done']) {
+            $result['likely'] = Suspect::query()->where('status', 'likely')->count();
+            $result['suspect'] = Suspect::query()->where('status', 'suspect')->count();
+            $result['watch'] = Suspect::query()->where('status', 'watch')->count();
+        }
+
         if ($ajax) {
             return response()->json($result);
         }
 
-        return to_route('voteguard.admin.index')
-            ->with('success', trans('voteguard::admin.scan.done', [
-                'scanned' => $result['total'],
-                'flagged' => $result['flagged'],
-            ]));
+        return to_route('voteguard.admin.index', [
+            'from' => $from->toDateString(),
+            'to' => $to->toDateString(),
+        ])->with('success', trans('voteguard::admin.scan.done', [
+            'scanned' => $result['total'],
+            'likely' => $result['likely'] ?? 0,
+            'suspect' => $result['suspect'] ?? 0,
+            'watch' => $result['watch'] ?? 0,
+        ]));
     }
 }

@@ -9,7 +9,9 @@
         <div class="alert alert-success">
             {{ trans('voteguard::admin.scan.done', [
                 'scanned' => request('scan_total'),
-                'flagged' => request('scan_flagged', 0),
+                'likely' => request('scan_likely', $countLikely),
+                'suspect' => request('scan_suspect', $countSuspect),
+                'watch' => request('scan_watch', $countWatch),
             ]) }}
         </div>
     @endif
@@ -225,7 +227,6 @@
 
             async function runScan() {
                 let offset = 0;
-                let flagged = 0;
 
                 while (true) {
                     const response = await fetch(form.action, {
@@ -250,13 +251,14 @@
 
                     const data = await response.json();
                     offset = data.offset || 0;
-                    flagged += data.flagged || 0;
                     setProgress(offset, data.total || 0);
 
                     if (data.done) {
                         const url = new URL(indexUrl, window.location.origin);
                         url.searchParams.set('scan_total', String(data.total || 0));
-                        url.searchParams.set('scan_flagged', String(flagged));
+                        url.searchParams.set('scan_likely', String(data.likely || 0));
+                        url.searchParams.set('scan_suspect', String(data.suspect || 0));
+                        url.searchParams.set('scan_watch', String(data.watch || 0));
                         url.searchParams.set('from', form.querySelector('[name="from"]').value);
                         url.searchParams.set('to', form.querySelector('[name="to"]').value);
                         window.location.href = url.toString();

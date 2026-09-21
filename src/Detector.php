@@ -91,6 +91,15 @@ class Detector
         $user = User::find($userId);
 
         if ($user === null) {
+            $orphan = Suspect::query()->firstWhere('user_id', $userId);
+
+            if ($orphan !== null && ! $orphan->isLocked()) {
+                $orphan->score = 0;
+                $orphan->last_flags = [];
+                $orphan->status = 'clear';
+                $orphan->save();
+            }
+
             return 0;
         }
 

@@ -28,7 +28,7 @@ return [
         'help' => 'Parcourt les votes entre les deux dates et met à jour toute la liste. Ne bloque personne. Préfère ~60 jours : une période trop courte durcit les scores.',
         'progress' => 'Analyse : :current / :total joueurs',
         'error' => 'L\'analyse a échoué. Réessaie.',
-        'done' => 'Analyse terminée : :scanned joueurs, :flagged signalés.',
+        'done' => 'Analyse terminée : :scanned dossiers. :likely bot probable, :suspect suspects, :watch à surveiller.',
     ],
     'search' => 'Pseudo',
     'search_placeholder' => 'Pseudo…',

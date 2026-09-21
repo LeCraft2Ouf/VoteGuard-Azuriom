@@ -28,7 +28,7 @@ return [
         'help' => 'Reads votes between the two dates and refreshes the whole list. Nobody is punished. Prefer ~60 days: a short range makes scores harsher.',
         'progress' => 'Scan: :current / :total players',
         'error' => 'Scan failed. Try again.',
-        'done' => 'Scan done: :scanned players, :flagged flagged.',
+        'done' => 'Scan done: :scanned dossiers. :likely likely, :suspect suspects, :watch watch.',
     ],
     'search' => 'Username',
     'search_placeholder' => 'Username…',
