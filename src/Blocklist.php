@@ -5,7 +5,6 @@ namespace Azuriom\Plugin\VoteGuard;
 use Azuriom\Models\User;
 use Azuriom\Plugin\VoteGuard\Models\Suspect;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 class Blocklist
@@ -23,7 +22,12 @@ class Blocklist
         }
 
         try {
-            if ($this->blockedIds()->contains((int) $user->id)) {
+            $blocked = Suspect::query()
+                ->where('user_id', $user->id)
+                ->where('blocked', true)
+                ->exists();
+
+            if ($blocked) {
                 return true;
             }
 
@@ -33,35 +37,8 @@ class Blocklist
         }
     }
 
-    public function isUserIdBlocked(int $userId): bool
-    {
-        try {
-            return $this->blockedIds()->contains($userId);
-        } catch (Throwable) {
-            return false;
-        }
-    }
-
     public function flush(): void
     {
         Cache::forget(self::CACHE_KEY);
-    }
-
-    /**
-     * @return \Illuminate\Support\Collection<int, int>
-     */
-    private function blockedIds()
-    {
-        return Cache::remember(self::CACHE_KEY, 60, function () {
-            if (! Schema::hasColumn('voteguard_suspects', 'blocked')) {
-                return collect();
-            }
-
-            return Suspect::query()
-                ->where('blocked', true)
-                ->pluck('user_id')
-                ->map(fn ($id) => (int) $id)
-                ->values();
-        });
     }
 }

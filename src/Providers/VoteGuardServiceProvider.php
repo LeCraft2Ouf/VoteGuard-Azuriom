@@ -19,6 +19,7 @@ use Azuriom\Plugin\VoteGuard\View\Composers\VotePageComposer;
 use Azuriom\Plugin\VoteGuard\VoteContext;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\View;
+use Throwable;
 
 class VoteGuardServiceProvider extends BasePluginServiceProvider
 {
@@ -90,6 +91,12 @@ class VoteGuardServiceProvider extends BasePluginServiceProvider
             Vote::observe(VoteObserver::class);
 
             View::composer('vote::index', VotePageComposer::class);
+        }
+
+        try {
+            $this->app->make('router')->pushMiddlewareToGroup('web', BlockBlacklistedVote::class);
+        } catch (Throwable) {
+            //
         }
 
         if (method_exists($this, 'registerSchedule')) {

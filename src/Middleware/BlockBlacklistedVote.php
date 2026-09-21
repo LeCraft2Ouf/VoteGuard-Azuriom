@@ -18,32 +18,34 @@ class BlockBlacklistedVote
      */
     public function handle(Request $request, Closure $next): Response
     {
-        try {
-            if (! $this->isVoteDone($request)) {
-                return $next($request);
-            }
+        if (! $this->isVoteDone($request)) {
+            return $next($request);
+        }
 
+        try {
             $user = $request->user();
 
-            if ($user === null && ! setting('vote.auth-required', false)) {
+            if ($user === null) {
                 $name = $request->input('user');
                 $user = is_string($name) && $name !== ''
                     ? User::firstWhere('name', $name)
                     : null;
             }
 
-            if ($user === null || ! app(Blocklist::class)->isBlocked($user)) {
-                return $next($request);
-            }
-
-            $this->rememberCooldown($request);
-
-            return response()->json([
-                'message' => trans('voteguard::messages.blocked'),
-            ], 403);
+            $blocked = $user !== null && app(Blocklist::class)->isBlocked($user);
         } catch (Throwable) {
             return $next($request);
         }
+
+        if (! $blocked) {
+            return $next($request);
+        }
+
+        $this->rememberCooldown($request);
+
+        return response()->json([
+            'message' => trans('voteguard::messages.blocked'),
+        ], 403);
     }
 
     private function isVoteDone(Request $request): bool
@@ -52,9 +54,13 @@ class BlockBlacklistedVote
             return false;
         }
 
-        $path = $request->path();
+        if ($request->routeIs('vote.done')) {
+            return true;
+        }
 
-        return str_starts_with($path, 'vote/site/') && str_ends_with($path, '/done');
+        $path = trim($request->path(), '/');
+
+        return (bool) preg_match('#(?:^|/)vote/site/[^/]+/done$#', $path);
     }
 
     private function rememberCooldown(Request $request): void

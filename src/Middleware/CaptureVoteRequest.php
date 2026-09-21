@@ -36,9 +36,9 @@ class CaptureVoteRequest
             return true;
         }
 
-        $path = $request->path();
+        $path = trim($request->path(), '/');
 
-        return str_starts_with($path, 'vote/site/') && str_ends_with($path, '/done');
+        return (bool) preg_match('#(?:^|/)vote/site/[^/]+/done$#', $path);
     }
 
     private function capture(Request $request): void
