@@ -25,6 +25,7 @@ class SuspectController extends Controller
             'suspect' => $suspect,
             'detections' => $detections,
             'intervals' => $detector->intervalRows($suspect->user_id, 50),
+            'mix' => $detector->patternAnalysis($suspect->user_id),
         ]);
     }
 

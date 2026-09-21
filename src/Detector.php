@@ -51,16 +51,15 @@ class Detector
             return;
         }
 
-        $flags = array_merge(
+        $pattern = $this->patternAnalysis($user->id);
+        $requestFlags = array_merge(
             $this->requestFlags($vote),
-            $this->patternFlags($user->id, $vote->site_id),
-            $this->sessionFlags($user->id),
             $this->ipFarmFlags($user->id),
         );
+        $flags = array_values(array_unique(array_merge($pattern['flags'], $requestFlags)));
+        $score = min(100, $pattern['score'] + $this->score($requestFlags));
 
-        $score = $this->score($flags);
-
-        if ($score < 15 && $flags === []) {
+        if ($score < $this->settings->watchScore()) {
             return;
         }
 
@@ -89,22 +88,13 @@ class Detector
 
         [$from, $to] = $this->period($from, $to);
 
-        $siteIds = Vote::query()
-            ->where('user_id', $userId)
-            ->whereBetween('created_at', [$from, $to])
-            ->distinct()
-            ->pluck('site_id');
-
-        $flags = $this->sessionFlags($userId, $from, $to);
-
-        foreach ($siteIds as $siteId) {
-            $flags = array_merge($flags, $this->patternFlags($userId, (int) $siteId, $from, $to));
-        }
-
-        $flags = array_values(array_unique($flags));
-        $score = $this->score($flags);
+        $pattern = $this->patternAnalysis($userId, $from, $to);
+        $score = $pattern['score'];
+        $flags = $pattern['flags'];
 
         if ($score < $this->settings->watchScore()) {
+            $this->downgradeExisting($user, $score, $flags);
+
             return $score;
         }
 
@@ -189,9 +179,12 @@ class Detector
             $gap = null;
             $sniper = false;
 
+            $kind = 'first';
+
             if (isset($lastBySite[$siteId])) {
                 $gap = (int) $vote->created_at->diffInSeconds($lastBySite[$siteId], true);
-                $sniper = $gap >= $expected && $gap <= $expected + $this->settings->sniperSeconds();
+                $kind = $this->gapKind($gap, $expected);
+                $sniper = $kind === 'sniper';
             }
 
             $rows[] = [
@@ -207,6 +200,7 @@ class Detector
                     ? '—'
                     : (($gap - $expected >= 0 ? '+' : '−').$this->formatDuration(abs($gap - $expected))),
                 'sniper' => $sniper,
+                'kind' => $kind,
             ];
 
             $lastBySite[$siteId] = $vote->created_at;
@@ -265,132 +259,166 @@ class Detector
     }
 
     /**
-     * @return list<string>
+     * Score = moyenne des votes éveillés (hors pauses longues).
+     * Un vote pile cooldown = 100, à la limite = 75, classique = 0.
+     *
+     * @return array{score: int, flags: list<string>, snipers: int, tight: int, classic: int, sleeps: int, awake: int, total: int}
      */
-    private function patternFlags(int $userId, ?int $siteId, ?Carbon $from = null, ?Carbon $to = null): array
+    public function patternAnalysis(int $userId, ?Carbon $from = null, ?Carbon $to = null): array
     {
-        if ($siteId === null || ! class_exists(Vote::class)) {
-            return [];
-        }
+        $zero = [
+            'score' => 0,
+            'flags' => [],
+            'snipers' => 0,
+            'tight' => 0,
+            'classic' => 0,
+            'sleeps' => 0,
+            'awake' => 0,
+            'total' => 0,
+        ];
 
-        [$from, $to] = $this->period($from, $to);
-
-        $votes = Vote::query()
-            ->where('user_id', $userId)
-            ->where('site_id', $siteId)
-            ->whereBetween('created_at', [$from, $to])
-            ->orderBy('created_at')
-            ->pluck('created_at')
-            ->values();
-
-        $site = class_exists(Site::class) ? Site::find($siteId) : null;
-
-        return $this->flagsFromTimestamps($votes, $this->expectedDelay($site));
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function sessionFlags(int $userId, ?Carbon $from = null, ?Carbon $to = null): array
-    {
         if (! class_exists(Vote::class)) {
-            return [];
+            return $zero;
         }
 
         [$from, $to] = $this->period($from, $to);
 
-        $times = Vote::query()
+        $siteIds = Vote::query()
             ->where('user_id', $userId)
             ->whereBetween('created_at', [$from, $to])
-            ->orderBy('created_at')
-            ->pluck('created_at');
+            ->distinct()
+            ->pluck('site_id');
 
-        $sessions = [];
-        $lastVote = null;
+        $merged = $zero;
+        $suspicions = [];
 
-        foreach ($times as $time) {
-            $at = Carbon::parse($time);
-
-            if ($lastVote === null || $at->diffInSeconds($lastVote, true) > 900) {
-                $sessions[] = $at;
-            }
-
-            $lastVote = $at;
-        }
-
-        $minDelay = 90;
-
-        if (class_exists(Site::class)) {
-            $siteIds = Vote::query()
+        foreach ($siteIds as $siteId) {
+            $votes = Vote::query()
                 ->where('user_id', $userId)
+                ->where('site_id', (int) $siteId)
                 ->whereBetween('created_at', [$from, $to])
-                ->distinct()
-                ->pluck('site_id');
+                ->orderBy('created_at')
+                ->pluck('created_at')
+                ->values();
 
-            $fromSites = Site::query()->whereIn('id', $siteIds)->min('vote_delay');
+            $site = class_exists(Site::class) ? Site::find($siteId) : null;
+            $part = $this->classifyTimestamps($votes, $this->expectedDelay($site));
 
-            if ($fromSites) {
-                $minDelay = (int) $fromSites;
-            }
+            $suspicions = array_merge($suspicions, $part['suspicions']);
+            $merged['snipers'] += $part['snipers'];
+            $merged['tight'] += $part['tight'];
+            $merged['classic'] += $part['classic'];
+            $merged['sleeps'] += $part['sleeps'];
+            $merged['total'] += $part['total'];
         }
 
-        return $this->flagsFromTimestamps(collect($sessions), max(60, $minDelay * 60));
+        $awake = count($suspicions);
+        $merged['awake'] = $awake;
+        $min = $this->settings->minVotes();
+
+        if ($awake < $min - 1) {
+            return $merged;
+        }
+
+        $score = (int) round(array_sum($suspicions) / $awake);
+        $sniperRatio = $merged['snipers'] / $awake;
+        $botRatio = ($merged['snipers'] + $merged['tight']) / $awake;
+        $sleepRatio = $merged['sleeps'] / max(1, $merged['total']);
+        $flags = [];
+
+        if ($merged['snipers'] >= $min - 1 && $sniperRatio >= 0.40) {
+            $flags[] = 'cooldown_sniper';
+        }
+
+        if (($merged['snipers'] + $merged['tight']) >= $min - 1 && $botRatio >= 0.50) {
+            $flags[] = 'regular_interval';
+        }
+
+        if ($merged['total'] >= 12 && $sleepRatio <= 0.10 && $score >= 40) {
+            $flags[] = 'always_on';
+            $score = min(100, $score + 10);
+        }
+
+        $merged['score'] = $score;
+        $merged['flags'] = $flags;
+
+        return $merged;
     }
 
     /**
      * @param  \Illuminate\Support\Collection<int, mixed>  $timestamps
-     * @return list<string>
+     * @return array{suspicions: list<int>, snipers: int, tight: int, classic: int, sleeps: int, total: int}
      */
-    private function flagsFromTimestamps($timestamps, int $expected): array
+    private function classifyTimestamps($timestamps, int $expected): array
     {
-        $min = $this->settings->minVotes();
+        $out = [
+            'suspicions' => [],
+            'snipers' => 0,
+            'tight' => 0,
+            'classic' => 0,
+            'sleeps' => 0,
+            'total' => 0,
+        ];
 
-        if ($timestamps->count() < $min) {
-            return [];
+        if ($timestamps->count() < 2) {
+            return $out;
         }
-
-        $intervals = [];
 
         for ($i = 1, $len = $timestamps->count(); $i < $len; $i++) {
-            $intervals[] = (int) Carbon::parse($timestamps[$i])->diffInSeconds(Carbon::parse($timestamps[$i - 1]), true);
-        }
+            $gap = (int) Carbon::parse($timestamps[$i])->diffInSeconds(Carbon::parse($timestamps[$i - 1]), true);
+            $out['total']++;
+            $kind = $this->gapKind($gap, $expected);
 
-        if ($intervals === []) {
-            return [];
-        }
-
-        $low = (int) ($expected * 0.92);
-        $high = (int) ($expected * 1.25);
-        $near = array_values(array_filter($intervals, fn (int $gap) => $gap >= $low && $gap <= $high));
-        $flags = [];
-        $ratio = count($near) / count($intervals);
-
-        if (count($near) >= $min - 1 && $ratio >= 0.40) {
-            $flags[] = 'regular_interval';
-        }
-
-        if (count($near) >= $min - 1 && $this->stddev($near) <= $this->settings->maxStddev()) {
-            $flags[] = 'regular_interval';
-        }
-
-        $sniperLimit = $expected + $this->settings->sniperSeconds();
-        $snipers = array_values(array_filter($near, fn (int $gap) => $gap >= $expected && $gap <= $sniperLimit));
-
-        if (count($snipers) >= $min - 1) {
-            $flags[] = 'cooldown_sniper';
-        }
-
-        $awake = array_values(array_filter($intervals, fn (int $gap) => $gap <= (int) ($expected * 2.2)));
-
-        if (count($awake) >= 10) {
-            $span = array_sum(array_slice($awake, -12));
-
-            if ($span >= 10 * 3600 && $span <= 20 * 3600) {
-                $flags[] = 'always_on';
+            if ($kind === 'early') {
+                continue;
             }
+
+            if ($kind === 'sleep') {
+                $out['sleeps']++;
+
+                continue;
+            }
+
+            if ($kind === 'sniper') {
+                $out['suspicions'][] = 100;
+                $out['snipers']++;
+
+                continue;
+            }
+
+            if ($kind === 'tight') {
+                $out['suspicions'][] = 75;
+                $out['tight']++;
+
+                continue;
+            }
+
+            $out['suspicions'][] = 0;
+            $out['classic']++;
         }
 
-        return array_values(array_unique($flags));
+        return $out;
+    }
+
+    private function gapKind(int $gap, int $expected): string
+    {
+        if ($gap < $expected) {
+            return 'early';
+        }
+
+        if ($gap <= $expected + $this->settings->sniperSeconds()) {
+            return 'sniper';
+        }
+
+        if ($gap <= $expected + max(480, $this->settings->sniperSeconds() * 2)) {
+            return 'tight';
+        }
+
+        if ($gap >= max((int) ($expected * 2.5), 6 * 3600)) {
+            return 'sleep';
+        }
+
+        return 'classic';
     }
 
     /**
@@ -446,6 +474,23 @@ class Detector
             $suspect->status = $this->statusFromScore($score);
         }
 
+        $suspect->save();
+    }
+
+    /**
+     * @param  list<string>  $flags
+     */
+    private function downgradeExisting(User $user, int $score, array $flags): void
+    {
+        $suspect = Suspect::query()->firstWhere('user_id', $user->id);
+
+        if ($suspect === null || $suspect->isLocked()) {
+            return;
+        }
+
+        $suspect->score = $score;
+        $suspect->last_flags = array_values(array_unique($flags));
+        $suspect->status = $this->statusFromScore($score);
         $suspect->save();
     }
 
@@ -527,27 +572,6 @@ class Detector
         }
 
         return max(60, $minutes * 60);
-    }
-
-    /**
-     * @param  list<int>  $values
-     */
-    private function stddev(array $values): float
-    {
-        $n = count($values);
-
-        if ($n < 2) {
-            return 0.0;
-        }
-
-        $mean = array_sum($values) / $n;
-        $sum = 0.0;
-
-        foreach ($values as $value) {
-            $sum += ($value - $mean) ** 2;
-        }
-
-        return sqrt($sum / $n);
     }
 
     private function formatDuration(int $seconds): string

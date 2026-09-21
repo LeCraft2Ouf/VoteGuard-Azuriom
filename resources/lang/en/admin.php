@@ -80,7 +80,8 @@ return [
         'no_detections' => 'No live detections yet (history only).',
         'no_intervals' => 'Not enough votes to show gaps.',
         'review' => 'Staff decision',
-        'hint' => 'A high score is not proof. Check the gaps: bots often vote +0 to +25 s after cooldown, 24/7.',
+        'hint' => 'The score is an average: a normal vote = 0, a cooldown sniper = 100. A few edge votes are not enough.',
+        'mix' => 'Average :score / 100 — :snipers on cooldown, :tight near the limit, :classic normal, :sleeps long breaks.',
     ],
     'settings' => [
         'title' => 'VoteGuard settings',

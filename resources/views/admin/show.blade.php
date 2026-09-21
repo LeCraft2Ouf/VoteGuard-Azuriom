@@ -26,7 +26,11 @@
                         </thead>
                         <tbody>
                         @forelse ($intervals as $row)
-                            <tr class="{{ $row['sniper'] ? 'table-danger' : '' }}">
+                            <tr class="{{ match ($row['kind'] ?? '') {
+                                'sniper' => 'table-danger',
+                                'tight' => 'table-warning',
+                                default => '',
+                            } }}">
                                 <td class="text-nowrap fs-6">{{ $row['at_label'] ?? format_date_compact($row['at']) }}</td>
                                 <td class="fs-6">{{ $row['site'] }}</td>
                                 <td class="fs-6 text-nowrap">{{ $row['gap_label'] }}</td>
@@ -59,6 +63,15 @@
                     </div>
                     <p class="mb-1">{{ trans('voteguard::admin.fields.score') }} : <strong>{{ $suspect->score }}</strong>
                         (max {{ $suspect->max_score }})</p>
+                    @if (($mix['total'] ?? 0) > 0)
+                        <p class="small text-muted mb-2">{{ trans('voteguard::admin.show.mix', [
+                            'score' => $mix['score'],
+                            'snipers' => $mix['snipers'],
+                            'tight' => $mix['tight'],
+                            'classic' => $mix['classic'],
+                            'sleeps' => $mix['sleeps'],
+                        ]) }}</p>
+                    @endif
                     <p class="mb-0">
                         @php
                             $badge = match ($suspect->status) {

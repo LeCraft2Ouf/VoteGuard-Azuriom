@@ -80,7 +80,8 @@ return [
         'no_detections' => 'Pas encore de détection temps réel (seulement l\'historique).',
         'no_intervals' => 'Pas assez de votes pour afficher les écarts.',
         'review' => 'Décision staff',
-        'hint' => 'Un score élevé n\'est pas une preuve. Vérifie les écarts : un bot tape souvent +0 à +25 s après le cooldown, 24h/24.',
+        'hint' => 'Le score est une moyenne : vote classique = 0, pile cooldown = 100. Quelques votes à la limite ne suffisent pas.',
+        'mix' => 'Moyenne :score / 100 — :snipers pile cooldown, :tight à la limite, :classic classiques, :sleeps pauses.',
     ],
     'settings' => [
         'title' => 'Réglages VoteGuard',

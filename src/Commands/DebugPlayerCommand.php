@@ -44,8 +44,10 @@ class DebugPlayerCommand extends Command
 
         $score = $detector->analyzeUser($user->id);
         $suspect = \Azuriom\Plugin\VoteGuard\Models\Suspect::query()->where('user_id', $user->id)->first();
+        $mix = $detector->patternAnalysis($user->id);
 
         $this->info('score='.$score);
+        $this->info('mix snipers='.$mix['snipers'].' tight='.$mix['tight'].' classic='.$mix['classic'].' sleep='.$mix['sleeps'].' awake='.$mix['awake']);
         $this->info('flags='.json_encode($suspect->last_flags ?? []));
         $this->info('status='.($suspect->status ?? 'none'));
 
