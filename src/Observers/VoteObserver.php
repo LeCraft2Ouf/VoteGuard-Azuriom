@@ -10,15 +10,23 @@ use Throwable;
 
 class VoteObserver
 {
-    public function created(Vote $vote): void
+    public function creating(Vote $vote): bool
     {
         try {
             $user = $vote->user_id ? User::find($vote->user_id) : null;
-            app(RewardGuard::class)->denyIfBlocked($user);
+
+            if (app(RewardGuard::class)->denyIfBlocked($user)) {
+                return false;
+            }
         } catch (Throwable) {
-            //
+            return true;
         }
 
+        return true;
+    }
+
+    public function created(Vote $vote): void
+    {
         try {
             app(Detector::class)->handleLive($vote);
         } catch (Throwable) {

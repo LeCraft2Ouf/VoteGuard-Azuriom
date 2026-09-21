@@ -117,7 +117,7 @@ return [
         'mix' => 'Moyenne :score / 100 — :snipers pile cooldown, :tight à la limite, :classic classiques, :sleeps pauses.',
         'mix_title' => 'Répartition',
         'azuriom_profile' => 'Fiche Azuriom',
-        'blocked_help' => 'Le joueur peut toujours voter (listing + classement). Azuriom ne donne ni points, ni commandes, ni items.',
+        'blocked_help' => 'Le joueur peut voter sur le listing. Pas de points au classement, pas de récompense (points boutique, commandes, items).',
     ],
     'settings' => [
         'section_live' => 'Temps réel',
@@ -142,6 +142,6 @@ return [
         'whitelist' => 'Pseudos exclus (un par ligne)',
         'whitelist_info' => 'Ces comptes ne sont jamais signalés (staff, tests).',
         'blocklist' => 'Pseudos votes bloqués (un par ligne)',
-        'blocklist_info' => 'Ces comptes votent encore, mais Azuriom ne donne plus la récompense (points, commandes, items).',
+        'blocklist_info' => 'Ces comptes peuvent voter sur le listing, mais sans points au classement ni récompense Azuriom.',
     ],
 ];
