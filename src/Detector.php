@@ -400,6 +400,16 @@ class Detector
         return $out;
     }
 
+    public function classifyGap(int $gap, int $expected): string
+    {
+        return $this->gapKind($gap, $expected);
+    }
+
+    public function siteDelay(?object $site): int
+    {
+        return $this->expectedDelay($site);
+    }
+
     private function gapKind(int $gap, int $expected): string
     {
         if ($gap < $expected) {

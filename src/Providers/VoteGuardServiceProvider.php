@@ -8,6 +8,7 @@ use Azuriom\Models\Permission;
 use Azuriom\Plugin\Vote\Models\Vote;
 use Azuriom\Plugin\VoteGuard\Commands\DebugPlayerCommand;
 use Azuriom\Plugin\VoteGuard\Commands\ScanVotesCommand;
+use Azuriom\Plugin\VoteGuard\Commands\StatsCommand;
 use Azuriom\Plugin\VoteGuard\Detector;
 use Azuriom\Plugin\VoteGuard\Middleware\CaptureVoteRequest;
 use Azuriom\Plugin\VoteGuard\Observers\VoteObserver;
@@ -56,6 +57,7 @@ class VoteGuardServiceProvider extends BasePluginServiceProvider
         $this->commands([
             ScanVotesCommand::class,
             DebugPlayerCommand::class,
+            StatsCommand::class,
         ]);
 
         Permission::registerPermissions([
