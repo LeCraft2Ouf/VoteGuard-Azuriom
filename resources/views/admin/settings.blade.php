@@ -86,10 +86,15 @@
                     @enderror
                     <div class="form-text">{{ trans('voteguard::admin.settings.webhook_info') }}</div>
                 </div>
-                <div class="mb-0">
+                <div class="mb-3">
                     <label class="form-label" for="whitelist">{{ trans('voteguard::admin.settings.whitelist') }}</label>
-                    <textarea class="form-control" id="whitelist" name="whitelist" rows="5">{{ old('whitelist', $whitelist) }}</textarea>
+                    <textarea class="form-control" id="whitelist" name="whitelist" rows="4">{{ old('whitelist', $whitelist) }}</textarea>
                     <div class="form-text">{{ trans('voteguard::admin.settings.whitelist_info') }}</div>
+                </div>
+                <div class="mb-0">
+                    <label class="form-label" for="blocklist">{{ trans('voteguard::admin.settings.blocklist') }}</label>
+                    <textarea class="form-control" id="blocklist" name="blocklist" rows="5">{{ old('blocklist', $blocklist) }}</textarea>
+                    <div class="form-text">{{ trans('voteguard::admin.settings.blocklist_info') }}</div>
                 </div>
             </div>
         </div>

@@ -51,15 +51,41 @@ class Settings
         return $url !== '' ? $url : null;
     }
 
+    public function isWhitelisted(string $name): bool
+    {
+        return in_array(strtolower($name), $this->whitelist(), true);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function blocklist(): array
+    {
+        return $this->nameList('voteguard.blocklist');
+    }
+
+    public function isBlocklisted(string $name): bool
+    {
+        return in_array(strtolower($name), $this->blocklist(), true);
+    }
+
     /**
      * @return array<int, string>
      */
     public function whitelist(): array
     {
-        $raw = setting('voteguard.whitelist', '[]');
+        return $this->nameList('voteguard.whitelist');
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function nameList(string $key): array
+    {
+        $raw = setting($key, '[]');
 
         if (is_array($raw)) {
-            return array_values(array_filter(array_map('strtolower', $raw)));
+            return array_values(array_filter(array_map(static fn ($name) => strtolower(trim((string) $name)), $raw)));
         }
 
         $decoded = json_decode((string) $raw, true);
@@ -69,11 +95,6 @@ class Settings
         }
 
         return array_values(array_filter(array_map(static fn ($name) => strtolower(trim((string) $name)), $decoded)));
-    }
-
-    public function isWhitelisted(string $name): bool
-    {
-        return in_array(strtolower($name), $this->whitelist(), true);
     }
 
     private function bool(string $key, bool $default): bool

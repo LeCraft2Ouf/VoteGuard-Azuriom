@@ -13,12 +13,14 @@ return [
     'logs' => [
         'settings' => 'Réglages VoteGuard mis à jour',
         'scan' => 'Analyse historique VoteGuard lancée',
+        'block' => 'VoteGuard : blocage des votes',
     ],
     'stats' => [
         'likely' => 'Bot probable',
         'suspect' => 'Suspects',
         'watch' => 'À surveiller',
         'today' => 'Détections aujourd\'hui',
+        'blocked' => 'Votes bloqués',
     ],
     'scan' => [
         'title' => 'Analyse historique',
@@ -54,6 +56,7 @@ return [
         'ua' => 'User-Agent',
         'source' => 'Source',
         'note' => 'Note staff',
+        'blocked' => 'Bloquer les récompenses vote',
         'reviewed' => 'Revue',
     ],
     'status' => [
@@ -63,6 +66,7 @@ return [
         'likely' => 'Bot probable',
         'confirmed' => 'Confirmé',
         'false_positive' => 'Faux positif',
+        'blocked' => 'Votes bloqués',
     ],
     'flags' => [
         'no_session' => 'Pas de visite de la page vote',
@@ -108,6 +112,7 @@ return [
         'mix' => 'Moyenne :score / 100 — :snipers pile cooldown, :tight à la limite, :classic classiques, :sleeps pauses.',
         'mix_title' => 'Répartition',
         'azuriom_profile' => 'Fiche Azuriom',
+        'blocked_help' => 'Coupe la récompense Azuriom avant qu\'elle soit donnée. Pas de vote enregistré, pas de points. À utiliser seulement si tu es sûr que c\'est un bot.',
     ],
     'settings' => [
         'section_live' => 'Temps réel',
@@ -131,5 +136,7 @@ return [
         'webhook_info' => 'Notification si score ≥ suspect. 1 alerte max / joueur / 6 h.',
         'whitelist' => 'Pseudos exclus (un par ligne)',
         'whitelist_info' => 'Ces comptes ne sont jamais signalés (staff, tests).',
+        'blocklist' => 'Pseudos votes bloqués (un par ligne)',
+        'blocklist_info' => 'Ces comptes ne reçoivent plus de récompense vote. Le clic listing n\'est pas annulé, Azuriom ne donne rien.',
     ],
 ];

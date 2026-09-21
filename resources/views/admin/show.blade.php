@@ -106,6 +106,9 @@
 
                         <div class="mb-3">
                             @include('voteguard::admin.partials.status', ['status' => $suspect->status])
+                            @if ($suspect->blocked)
+                                <span class="badge text-bg-dark">{{ trans('voteguard::admin.status.blocked') }}</span>
+                            @endif
                         </div>
 
                         @if (($mix['total'] ?? 0) > 0)
@@ -138,6 +141,14 @@
                                         </option>
                                     @endforeach
                                 </select>
+                            </div>
+                            <div class="mb-3">
+                                <div class="form-check form-switch">
+                                    <input type="checkbox" class="form-check-input" id="blocked" name="blocked" value="1"
+                                           @checked(old('blocked', $suspect->blocked))>
+                                    <label class="form-check-label" for="blocked">{{ trans('voteguard::admin.fields.blocked') }}</label>
+                                </div>
+                                <div class="form-text">{{ trans('voteguard::admin.show.blocked_help') }}</div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label" for="note">{{ trans('voteguard::admin.fields.note') }}</label>

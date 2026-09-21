@@ -13,12 +13,14 @@ return [
     'logs' => [
         'settings' => 'VoteGuard settings updated',
         'scan' => 'VoteGuard history scan started',
+        'block' => 'VoteGuard vote block',
     ],
     'stats' => [
         'likely' => 'Likely bots',
         'suspect' => 'Suspects',
         'watch' => 'Watch list',
         'today' => 'Detections today',
+        'blocked' => 'Votes blocked',
     ],
     'scan' => [
         'title' => 'History scan',
@@ -54,6 +56,7 @@ return [
         'ua' => 'User-Agent',
         'source' => 'Source',
         'note' => 'Staff note',
+        'blocked' => 'Block vote rewards',
         'reviewed' => 'Reviewed',
     ],
     'status' => [
@@ -63,6 +66,7 @@ return [
         'likely' => 'Likely bot',
         'confirmed' => 'Confirmed',
         'false_positive' => 'False positive',
+        'blocked' => 'Votes blocked',
     ],
     'flags' => [
         'no_session' => 'Vote page was not visited',
@@ -108,6 +112,7 @@ return [
         'mix' => 'Average :score / 100 — :snipers on cooldown, :tight near the limit, :classic normal, :sleeps long breaks.',
         'mix_title' => 'Breakdown',
         'azuriom_profile' => 'Azuriom profile',
+        'blocked_help' => 'Stops the Azuriom reward before it is granted. No vote record, no points. Use only when you are sure it is a bot.',
     ],
     'settings' => [
         'section_live' => 'Live detection',
@@ -131,5 +136,7 @@ return [
         'webhook_info' => 'Notify when score ≥ suspect. Max 1 alert per player every 6 hours.',
         'whitelist' => 'Excluded names (one per line)',
         'whitelist_info' => 'These accounts are never flagged (staff, tests).',
+        'blocklist' => 'Blocked usernames (one per line)',
+        'blocklist_info' => 'These accounts no longer receive vote rewards. The listing click is not undone; Azuriom gives nothing.',
     ],
 ];

@@ -6,10 +6,12 @@ use Azuriom\Extensions\Plugin\BasePluginServiceProvider;
 use Azuriom\Models\ActionLog;
 use Azuriom\Models\Permission;
 use Azuriom\Plugin\Vote\Models\Vote;
+use Azuriom\Plugin\VoteGuard\Blocklist;
 use Azuriom\Plugin\VoteGuard\Commands\DebugPlayerCommand;
 use Azuriom\Plugin\VoteGuard\Commands\ScanVotesCommand;
 use Azuriom\Plugin\VoteGuard\Commands\StatsCommand;
 use Azuriom\Plugin\VoteGuard\Detector;
+use Azuriom\Plugin\VoteGuard\Middleware\BlockBlacklistedVote;
 use Azuriom\Plugin\VoteGuard\Middleware\CaptureVoteRequest;
 use Azuriom\Plugin\VoteGuard\Observers\VoteObserver;
 use Azuriom\Plugin\VoteGuard\Settings;
@@ -27,6 +29,7 @@ class VoteGuardServiceProvider extends BasePluginServiceProvider
      */
     protected array $middleware = [
         CaptureVoteRequest::class,
+        BlockBlacklistedVote::class,
     ];
 
     /**
@@ -38,6 +41,7 @@ class VoteGuardServiceProvider extends BasePluginServiceProvider
 
         $this->app->singleton(VoteContext::class);
         $this->app->singleton(Settings::class);
+        $this->app->singleton(Blocklist::class);
         $this->app->singleton(Detector::class);
     }
 
@@ -74,6 +78,11 @@ class VoteGuardServiceProvider extends BasePluginServiceProvider
                 'icon' => 'search',
                 'color' => 'warning',
                 'message' => 'voteguard::admin.logs.scan',
+            ],
+            'voteguard.block' => [
+                'icon' => 'slash-circle',
+                'color' => 'danger',
+                'message' => 'voteguard::admin.logs.block',
             ],
         ]);
 

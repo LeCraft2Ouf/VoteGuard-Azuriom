@@ -3,6 +3,8 @@
 namespace Azuriom\Plugin\VoteGuard\Controllers\Admin;
 
 use Azuriom\Http\Controllers\Controller;
+use Azuriom\Models\ActionLog;
+use Azuriom\Plugin\VoteGuard\Blocklist;
 use Azuriom\Plugin\VoteGuard\Detector;
 use Azuriom\Plugin\VoteGuard\Models\Suspect;
 use Illuminate\Http\RedirectResponse;
@@ -29,19 +31,34 @@ class SuspectController extends Controller
         ]);
     }
 
-    public function update(Request $request, Suspect $suspect): RedirectResponse
+    public function update(Request $request, Suspect $suspect, Blocklist $blocklist): RedirectResponse
     {
         $validated = $this->validate($request, [
             'status' => ['required', Rule::in(['watch', 'suspect', 'likely', 'confirmed', 'false_positive'])],
             'note' => ['nullable', 'string', 'max:2000'],
         ]);
 
+        $blocked = $request->boolean('blocked');
+
+        if ($blocked) {
+            $validated['status'] = 'confirmed';
+        }
+
+        $wasBlocked = (bool) $suspect->blocked;
+
         $suspect->update([
             'status' => $validated['status'],
+            'blocked' => $blocked,
             'note' => $validated['note'] ?? null,
             'reviewed_by' => $request->user()->id,
             'reviewed_at' => now(),
         ]);
+
+        $blocklist->flush();
+
+        if ($wasBlocked !== $blocked && $suspect->user) {
+            ActionLog::log('voteguard.block', $suspect->user);
+        }
 
         return to_route('voteguard.admin.show', $suspect)
             ->with('success', trans('messages.status.success'));

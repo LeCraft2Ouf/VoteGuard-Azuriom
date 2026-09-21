@@ -18,6 +18,7 @@ class Suspect extends Model
         'max_score',
         'votes_analyzed',
         'status',
+        'blocked',
         'last_flags',
         'note',
         'reviewed_by',
@@ -29,6 +30,7 @@ class Suspect extends Model
      */
     protected $casts = [
         'last_flags' => 'array',
+        'blocked' => 'boolean',
         'score' => 'integer',
         'max_score' => 'integer',
         'votes_analyzed' => 'integer',
@@ -52,6 +54,6 @@ class Suspect extends Model
 
     public function isLocked(): bool
     {
-        return in_array($this->status, ['confirmed', 'false_positive'], true);
+        return $this->blocked || in_array($this->status, ['confirmed', 'false_positive'], true);
     }
 }

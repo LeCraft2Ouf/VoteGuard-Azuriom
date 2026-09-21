@@ -21,6 +21,7 @@
             ['key' => 'likely', 'count' => $countLikely, 'border' => 'border-danger'],
             ['key' => 'suspect', 'count' => $countSuspect, 'border' => 'border-warning'],
             ['key' => 'watch', 'count' => $countWatch, 'border' => ''],
+            ['key' => 'blocked', 'count' => $countBlocked, 'border' => 'border-dark'],
         ] as $stat)
             <div class="col-md-3">
                 <a href="{{ route('voteguard.admin.index', array_filter(['status' => $status === $stat['key'] ? null : $stat['key'], 'search' => $search])) }}"
@@ -34,14 +35,6 @@
                 </a>
             </div>
         @endforeach
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-body">
-                    <div class="text-muted small">{{ trans('voteguard::admin.stats.today') }}</div>
-                    <div class="fs-3 fw-bold">{{ $detectionsToday }}</div>
-                </div>
-            </div>
-        </div>
     </div>
 
     <div class="row g-3 mb-4">
@@ -59,7 +52,7 @@
                             <label class="form-label" for="status">{{ trans('voteguard::admin.fields.status') }}</label>
                             <select class="form-select" id="status" name="status">
                                 <option value="">{{ trans('voteguard::admin.all_status') }}</option>
-                                @foreach (['watch', 'suspect', 'likely', 'confirmed', 'false_positive'] as $key)
+                                @foreach (['watch', 'suspect', 'likely', 'confirmed', 'blocked', 'false_positive'] as $key)
                                     <option value="{{ $key }}" @selected($status === $key)>
                                         {{ trans('voteguard::admin.status.'.$key) }}
                                     </option>
@@ -146,7 +139,14 @@
                                 <div class="text-muted small">max {{ $suspect->max_score }}</div>
                             @endif
                         </td>
-                        <td>@include('voteguard::admin.partials.status', ['status' => $suspect->status])</td>
+                        <td>
+                            <div class="d-flex flex-wrap gap-1 align-items-center">
+                                @include('voteguard::admin.partials.status', ['status' => $suspect->status])
+                                @if ($suspect->blocked)
+                                    <span class="badge text-bg-dark">{{ trans('voteguard::admin.status.blocked') }}</span>
+                                @endif
+                            </div>
+                        </td>
                         <td>@include('voteguard::admin.partials.flags', ['flags' => $suspect->last_flags, 'limit' => 2])</td>
                         <td class="text-nowrap text-muted small" title="{{ format_date($suspect->updated_at) }}">
                             {{ format_date_compact($suspect->updated_at) }}

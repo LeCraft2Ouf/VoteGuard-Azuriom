@@ -5,7 +5,6 @@ namespace Azuriom\Plugin\VoteGuard\Controllers\Admin;
 use Azuriom\Http\Controllers\Controller;
 use Azuriom\Models\ActionLog;
 use Azuriom\Plugin\VoteGuard\Detector;
-use Azuriom\Plugin\VoteGuard\Models\Detection;
 use Azuriom\Plugin\VoteGuard\Models\Suspect;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -27,8 +26,10 @@ class DashboardController extends Controller
                     $userQuery->where('name', 'like', '%'.$search.'%');
                 });
             })
-            ->when($status, fn ($query) => $query->where('status', $status))
+            ->when($status === 'blocked', fn ($query) => $query->where('blocked', true))
+            ->when($status && $status !== 'blocked', fn ($query) => $query->where('status', $status))
             ->where('status', '!=', 'clear')
+            ->orderByDesc('blocked')
             ->orderByDesc('score')
             ->paginate();
 
@@ -41,7 +42,7 @@ class DashboardController extends Controller
             'countLikely' => Suspect::query()->where('status', 'likely')->count(),
             'countSuspect' => Suspect::query()->where('status', 'suspect')->count(),
             'countWatch' => Suspect::query()->where('status', 'watch')->count(),
-            'detectionsToday' => Detection::query()->where('created_at', '>=', today())->count(),
+            'countBlocked' => Suspect::query()->where('blocked', true)->count(),
         ]);
     }
 
