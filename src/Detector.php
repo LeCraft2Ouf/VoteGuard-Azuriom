@@ -34,6 +34,14 @@ class Detector
         'ip_farm' => 20,
     ];
 
+    private const SNIPER_POINTS = 100;
+
+    private const TIGHT_POINTS = 40;
+
+    private const CONFIDENCE_AWAKE = 24;
+
+    private const MIN_FLAG_AWAKE = 12;
+
     public function __construct(
         private Settings $settings,
         private VoteContext $context,
@@ -259,8 +267,8 @@ class Detector
     }
 
     /**
-     * Score = moyenne des votes éveillés (hors pauses longues).
-     * Un vote pile cooldown = 100, à la limite = 75, classique = 0.
+     * Score = moyenne des votes éveillés, pondérée par le volume.
+     * Sniper = 100, limite (+3–8 min) = 40, classique = 0.
      *
      * @return array{score: int, flags: list<string>, snipers: int, tight: int, classic: int, sleeps: int, awake: int, total: int}
      */
@@ -314,35 +322,52 @@ class Detector
 
         $awake = count($suspicions);
         $merged['awake'] = $awake;
+        $scored = $this->scoreMix($merged + ['sum' => array_sum($suspicions)]);
+        $merged['score'] = $scored['score'];
+        $merged['flags'] = $scored['flags'];
+
+        return $merged;
+    }
+
+    /**
+     * @param  array{snipers: int, tight: int, classic?: int, sleeps: int, total: int, awake: int, sum?: int}  $mix
+     * @return array{score: int, flags: list<string>}
+     */
+    public function scoreMix(array $mix): array
+    {
+        $awake = (int) ($mix['awake'] ?? 0);
         $min = $this->settings->minVotes();
 
-        if ($awake < $min - 1) {
-            return $merged;
+        if ($awake < $min) {
+            return ['score' => 0, 'flags' => []];
         }
 
-        $score = (int) round(array_sum($suspicions) / $awake);
-        $sniperRatio = $merged['snipers'] / $awake;
-        $botRatio = ($merged['snipers'] + $merged['tight']) / $awake;
-        $sleepRatio = $merged['sleeps'] / max(1, $merged['total']);
+        $snipers = (int) ($mix['snipers'] ?? 0);
+        $tight = (int) ($mix['tight'] ?? 0);
+        $sleeps = (int) ($mix['sleeps'] ?? 0);
+        $total = max(1, (int) ($mix['total'] ?? 0));
+        $sum = (int) ($mix['sum'] ?? ($snipers * self::SNIPER_POINTS + $tight * self::TIGHT_POINTS));
+        $avg = $sum / $awake;
+        $score = (int) round($avg * min(1.0, $awake / self::CONFIDENCE_AWAKE));
+        $sniperRatio = $snipers / $awake;
+        $botRatio = ($snipers + $tight) / $awake;
+        $sleepRatio = $sleeps / $total;
         $flags = [];
 
-        if ($merged['snipers'] >= $min - 1 && $sniperRatio >= 0.40) {
+        if ($awake >= self::MIN_FLAG_AWAKE && $snipers >= $min && $sniperRatio >= 0.40) {
             $flags[] = 'cooldown_sniper';
         }
 
-        if (($merged['snipers'] + $merged['tight']) >= $min - 1 && $botRatio >= 0.50) {
+        if ($awake >= self::MIN_FLAG_AWAKE && $sniperRatio >= 0.35 && $botRatio >= 0.50) {
             $flags[] = 'regular_interval';
         }
 
-        if ($merged['total'] >= 12 && $sleepRatio <= 0.10 && $score >= 40) {
+        if ($total >= 20 && $sleepRatio <= 0.15 && $sniperRatio >= 0.40) {
             $flags[] = 'always_on';
             $score = min(100, $score + 10);
         }
 
-        $merged['score'] = $score;
-        $merged['flags'] = $flags;
-
-        return $merged;
+        return ['score' => $score, 'flags' => $flags];
     }
 
     /**
@@ -380,14 +405,14 @@ class Detector
             }
 
             if ($kind === 'sniper') {
-                $out['suspicions'][] = 100;
+                $out['suspicions'][] = self::SNIPER_POINTS;
                 $out['snipers']++;
 
                 continue;
             }
 
             if ($kind === 'tight') {
-                $out['suspicions'][] = 75;
+                $out['suspicions'][] = self::TIGHT_POINTS;
                 $out['tight']++;
 
                 continue;

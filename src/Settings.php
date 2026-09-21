@@ -11,7 +11,7 @@ class Settings
 
     public function watchScore(): int
     {
-        return $this->int('voteguard.watch', 25);
+        return $this->int('voteguard.watch', 30);
     }
 
     public function suspectScore(): int

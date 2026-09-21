@@ -97,7 +97,7 @@ class StatsCommand extends Command
                     $row['awake']++;
                 } elseif ($kind === 'tight') {
                     $row['tight']++;
-                    $row['sum'] += 75;
+                    $row['sum'] += 40;
                     $row['awake']++;
                 } elseif ($kind === 'classic') {
                     $row['classic']++;
@@ -132,39 +132,42 @@ class StatsCommand extends Command
         $this->table(['type', 'n', '%'], $this->pctRows($kinds, $kindTotal));
         $this->table(['delta_vs_cd', 'n', '%'], $this->pctRows($deltas, max(1, array_sum($deltas))));
 
-        $bands = ['0-24' => 0, '25-49' => 0, '50-79' => 0, '80-100' => 0, 'ignore' => 0];
+        $watch = $settings->watchScore();
+        $suspect = $settings->suspectScore();
+        $likely = $settings->likelyScore();
+        $bands = [
+            'clear(<'.$watch.')' => 0,
+            'watch' => 0,
+            'suspect' => 0,
+            'likely(>='.$likely.')' => 0,
+            'ignore' => 0,
+        ];
         $ranked = [];
         $ratios = [];
 
         foreach ($users as $userId => $row) {
-            if ($row['awake'] < $min - 1) {
+            $scored = $detector->scoreMix($row);
+            $score = $scored['score'];
+            $flags = $scored['flags'];
+
+            if ($row['awake'] < $min) {
                 $bands['ignore']++;
 
                 continue;
             }
 
-            $score = (int) round($row['sum'] / $row['awake']);
-            $sleepRatio = $row['sleeps'] / max(1, $row['total']);
-            $sniperRatio = $row['snipers'] / $row['awake'];
-            $botRatio = ($row['snipers'] + $row['tight']) / $row['awake'];
-            $flags = [];
-
-            if ($row['snipers'] >= $min - 1 && $sniperRatio >= 0.40) {
-                $flags[] = 'cooldown_sniper';
-            }
-
-            if (($row['snipers'] + $row['tight']) >= $min - 1 && $botRatio >= 0.50) {
-                $flags[] = 'regular_interval';
-            }
-
-            if ($row['total'] >= 12 && $sleepRatio <= 0.10 && $score >= 40) {
-                $flags[] = 'always_on';
-                $score = min(100, $score + 10);
-            }
-
+            $sniperRatio = $row['awake'] > 0 ? $row['snipers'] / $row['awake'] : 0;
             $ratios[] = round($sniperRatio * 100);
-            $band = $score >= 80 ? '80-100' : ($score >= 50 ? '50-79' : ($score >= 25 ? '25-49' : '0-24'));
-            $bands[$band]++;
+
+            if ($score >= $likely) {
+                $bands['likely(>='.$likely.')']++;
+            } elseif ($score >= $suspect) {
+                $bands['suspect']++;
+            } elseif ($score >= $watch) {
+                $bands['watch']++;
+            } else {
+                $bands['clear(<'.$watch.')']++;
+            }
             $ranked[] = [
                 'id' => $userId,
                 'score' => $score,
