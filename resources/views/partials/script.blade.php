@@ -7,4 +7,4 @@
         blockedMessage: @json($blockedMessage ?? trans('voteguard::messages.blocked'))
     };
 </script>
-<script src="{{ plugin_asset('voteguard', 'js/guard.js') }}?v=1.1.1" defer></script>
+<script src="{{ plugin_asset('voteguard', 'js/guard.js') }}?v=1.1.2" defer></script>

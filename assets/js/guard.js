@@ -7,27 +7,23 @@
             return;
         }
 
-        var bar = document.createElement('div');
-        bar.id = 'voteguard-blocked';
-        bar.setAttribute('role', 'alert');
-        bar.style.cssText = 'position:relative;z-index:50;margin:0 0 1rem;padding:.9rem 1.1rem;border-radius:.5rem;background:#7f1d1d;color:#fff;font-weight:600;text-align:center';
-        bar.textContent = msg;
-
-        var host = document.getElementById('vote-card')
-            || document.getElementById('status-message')
-            || document.querySelector('[data-vote-step]')
-            || document.querySelector('main')
-            || document.body;
-        host.insertBefore(bar, host.firstChild);
+        var alert = document.createElement('div');
+        alert.id = 'voteguard-blocked';
+        alert.className = 'alert alert-danger';
+        alert.setAttribute('role', 'alert');
+        alert.textContent = msg;
 
         var status = document.getElementById('status-message');
+
         if (status) {
-            status.replaceChildren();
-            var alert = document.createElement('div');
-            alert.className = 'alert alert-danger';
-            alert.setAttribute('role', 'alert');
-            alert.textContent = msg;
-            status.appendChild(alert);
+            status.replaceChildren(alert);
+        } else {
+            var host = document.getElementById('vote-card')
+                || document.querySelector('[data-vote-step]');
+
+            if (host) {
+                host.insertBefore(alert, host.firstChild);
+            }
         }
 
         document.querySelectorAll('[data-vote-url], [data-vote-id]').forEach(function (el) {
