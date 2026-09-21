@@ -8,16 +8,22 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (! Schema::hasTable('voteguard_suspects') || Schema::hasColumn('voteguard_suspects', 'blocked')) {
+            return;
+        }
+
         Schema::table('voteguard_suspects', function (Blueprint $table) {
-            $table->boolean('blocked')->default(false)->after('status');
-            $table->index('blocked');
+            $table->boolean('blocked')->default(false);
         });
     }
 
     public function down(): void
     {
+        if (! Schema::hasTable('voteguard_suspects') || ! Schema::hasColumn('voteguard_suspects', 'blocked')) {
+            return;
+        }
+
         Schema::table('voteguard_suspects', function (Blueprint $table) {
-            $table->dropIndex(['blocked']);
             $table->dropColumn('blocked');
         });
     }

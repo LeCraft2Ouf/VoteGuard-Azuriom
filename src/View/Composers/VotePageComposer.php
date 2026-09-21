@@ -2,14 +2,20 @@
 
 namespace Azuriom\Plugin\VoteGuard\View\Composers;
 
-use Illuminate\Support\Facades\View as ViewFacade;
 use Illuminate\View\View;
+use Throwable;
 
 class VotePageComposer
 {
     public function compose(View $view): void
     {
-        ViewFacade::startPush('scripts', view('voteguard::partials.script')->render());
-        ViewFacade::stopPush();
+        try {
+            $view->getFactory()->startPush(
+                'scripts',
+                view('voteguard::partials.script')->render()
+            );
+        } catch (Throwable) {
+            // Ne jamais casser la page vote.
+        }
     }
 }
