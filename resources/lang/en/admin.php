@@ -117,7 +117,7 @@ return [
         'mix' => 'Average :score / 100 — :snipers on cooldown, :tight near the limit, :classic normal, :sleeps long breaks.',
         'mix_title' => 'Breakdown',
         'azuriom_profile' => 'Azuriom profile',
-        'blocked_help' => 'Stops the Azuriom reward before it is granted. No vote record, no points. Use only when you are sure it is a bot.',
+        'blocked_help' => 'The player can still vote (listing + leaderboard). Azuriom will not give money, commands, or items.',
     ],
     'settings' => [
         'section_live' => 'Live detection',
@@ -142,6 +142,6 @@ return [
         'whitelist' => 'Excluded names (one per line)',
         'whitelist_info' => 'These accounts are never flagged (staff, tests).',
         'blocklist' => 'Blocked usernames (one per line)',
-        'blocklist_info' => 'These accounts no longer receive vote rewards. The listing click is not undone; Azuriom gives nothing.',
+        'blocklist_info' => 'These accounts can still vote, but Azuriom will not give the reward (money, commands, items).',
     ],
 ];

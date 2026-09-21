@@ -14,6 +14,8 @@ class VoteContext
 
     public ?string $accept = null;
 
+    public bool $skipReward = false;
+
     public ?string $token = null;
 
     /**

@@ -14,6 +14,7 @@ use Azuriom\Plugin\VoteGuard\Detector;
 use Azuriom\Plugin\VoteGuard\Middleware\BlockBlacklistedVote;
 use Azuriom\Plugin\VoteGuard\Middleware\CaptureVoteRequest;
 use Azuriom\Plugin\VoteGuard\Observers\VoteObserver;
+use Azuriom\Plugin\VoteGuard\RewardGuard;
 use Azuriom\Plugin\VoteGuard\Settings;
 use Azuriom\Plugin\VoteGuard\View\Composers\VotePageComposer;
 use Azuriom\Plugin\VoteGuard\VoteContext;
@@ -43,6 +44,7 @@ class VoteGuardServiceProvider extends BasePluginServiceProvider
         $this->app->singleton(VoteContext::class);
         $this->app->singleton(Settings::class);
         $this->app->singleton(Blocklist::class);
+        $this->app->singleton(RewardGuard::class);
         $this->app->singleton(Detector::class);
     }
 
@@ -91,6 +93,16 @@ class VoteGuardServiceProvider extends BasePluginServiceProvider
             Vote::observe(VoteObserver::class);
 
             View::composer('vote::index', VotePageComposer::class);
+        }
+
+        if (class_exists(\Azuriom\Plugin\Vote\Models\Reward::class)) {
+            \Azuriom\Plugin\Vote\Models\Reward::retrieved(function ($reward) {
+                try {
+                    app(RewardGuard::class)->stripReward($reward);
+                } catch (Throwable) {
+                    //
+                }
+            });
         }
 
         try {

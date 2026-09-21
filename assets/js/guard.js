@@ -1,70 +1,5 @@
 (function () {
     const cfg = window.VoteGuard || {};
-
-    function showBlockedBanner() {
-        var msg = cfg.blockedMessage || 'Tes votes sont bloqués.';
-        if (document.getElementById('voteguard-blocked')) {
-            return;
-        }
-
-        var alert = document.createElement('div');
-        alert.id = 'voteguard-blocked';
-        alert.className = 'alert alert-danger';
-        alert.setAttribute('role', 'alert');
-        alert.textContent = msg;
-
-        var status = document.getElementById('status-message');
-
-        if (status) {
-            status.replaceChildren(alert);
-        } else {
-            var host = document.getElementById('vote-card')
-                || document.querySelector('[data-vote-step]');
-
-            if (host) {
-                host.insertBefore(alert, host.firstChild);
-            }
-        }
-
-        document.querySelectorAll('[data-vote-url], [data-vote-id]').forEach(function (el) {
-            el.classList.add('disabled');
-            el.style.pointerEvents = 'none';
-            el.setAttribute('aria-disabled', 'true');
-        });
-    }
-
-    function rejectBlockedVote(url) {
-        var href = String(url || '');
-        if (href.indexOf('/vote/site/') === -1 || href.indexOf('/done') === -1) {
-            return null;
-        }
-
-        return {
-            response: {
-                status: 403,
-                data: { message: cfg.blockedMessage || 'Tes votes sont bloqués.' }
-            }
-        };
-    }
-
-    if (cfg.blocked) {
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', showBlockedBanner);
-        } else {
-            showBlockedBanner();
-        }
-
-        if (window.axios && window.axios.interceptors) {
-            window.axios.interceptors.request.use(function (config) {
-                var blocked = rejectBlockedVote(config && config.url);
-                if (blocked) {
-                    return Promise.reject(blocked);
-                }
-                return config;
-            });
-        }
-    }
-
     if (!cfg.sessionUrl) {
         return;
     }
@@ -141,13 +76,6 @@
         const link = ev.target.closest('[data-vote-url], [data-vote-id]');
 
         if (!link || !state.token) {
-            return;
-        }
-
-        if (cfg.blocked) {
-            ev.preventDefault();
-            ev.stopPropagation();
-            showBlockedBanner();
             return;
         }
 

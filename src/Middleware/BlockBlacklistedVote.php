@@ -3,11 +3,9 @@
 namespace Azuriom\Plugin\VoteGuard\Middleware;
 
 use Azuriom\Models\User;
-use Azuriom\Plugin\Vote\Models\Site;
-use Azuriom\Plugin\VoteGuard\Blocklist;
+use Azuriom\Plugin\VoteGuard\RewardGuard;
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
@@ -32,20 +30,12 @@ class BlockBlacklistedVote
                     : null;
             }
 
-            $blocked = $user !== null && app(Blocklist::class)->isBlocked($user);
+            app(RewardGuard::class)->denyIfBlocked($user);
         } catch (Throwable) {
             return $next($request);
         }
 
-        if (! $blocked) {
-            return $next($request);
-        }
-
-        $this->rememberCooldown($request);
-
-        return response()->json([
-            'message' => trans('voteguard::messages.blocked'),
-        ], 403);
+        return app(RewardGuard::class)->rewriteResponse($next($request));
     }
 
     private function isVoteDone(Request $request): bool
@@ -61,19 +51,5 @@ class BlockBlacklistedVote
         $path = trim($request->path(), '/');
 
         return (bool) preg_match('#(?:^|/)vote/site/[^/]+/done$#', $path);
-    }
-
-    private function rememberCooldown(Request $request): void
-    {
-        $site = $request->route('site');
-
-        if (! $site instanceof Site) {
-            return;
-        }
-
-        $minutes = max(1, (int) ($site->vote_delay ?? 90));
-        $next = now()->addMinutes($minutes);
-
-        Cache::put('votes.site.'.$site->id.'.'.$request->ip(), $next, $next);
     }
 }
