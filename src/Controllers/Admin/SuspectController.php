@@ -4,6 +4,7 @@ namespace Azuriom\Plugin\VoteGuard\Controllers\Admin;
 
 use Azuriom\Http\Controllers\Controller;
 use Azuriom\Models\ActionLog;
+use Azuriom\Models\User;
 use Azuriom\Plugin\VoteGuard\Blocklist;
 use Azuriom\Plugin\VoteGuard\Detector;
 use Azuriom\Plugin\VoteGuard\Models\Suspect;
@@ -29,6 +30,34 @@ class SuspectController extends Controller
             'intervals' => $detector->intervalRows($suspect->user_id, 50),
             'mix' => $detector->patternAnalysis($suspect->user_id),
         ]);
+    }
+
+    public function open(Request $request): RedirectResponse
+    {
+        $validated = $this->validate($request, [
+            'name' => ['required', 'string', 'max:50'],
+        ]);
+
+        $user = User::query()
+            ->whereRaw('LOWER(name) = ?', [strtolower(trim($validated['name']))])
+            ->first();
+
+        if ($user === null) {
+            return to_route('voteguard.admin.index', ['search' => $validated['name']])
+                ->with('error', trans('voteguard::admin.player_not_found'));
+        }
+
+        $suspect = Suspect::query()->firstOrCreate(
+            ['user_id' => $user->id],
+            [
+                'score' => 0,
+                'max_score' => 0,
+                'status' => 'watch',
+                'blocked' => false,
+            ]
+        );
+
+        return to_route('voteguard.admin.show', $suspect);
     }
 
     public function update(Request $request, Suspect $suspect, Blocklist $blocklist): RedirectResponse

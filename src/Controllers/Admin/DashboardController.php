@@ -4,6 +4,7 @@ namespace Azuriom\Plugin\VoteGuard\Controllers\Admin;
 
 use Azuriom\Http\Controllers\Controller;
 use Azuriom\Models\ActionLog;
+use Azuriom\Models\User;
 use Azuriom\Plugin\VoteGuard\Detector;
 use Azuriom\Plugin\VoteGuard\Models\Suspect;
 use Carbon\Carbon;
@@ -28,10 +29,20 @@ class DashboardController extends Controller
             })
             ->when($status === 'blocked', fn ($query) => $query->where('blocked', true))
             ->when($status && $status !== 'blocked', fn ($query) => $query->where('status', $status))
-            ->where('status', '!=', 'clear')
+            ->when(! filled($search) && ! filled($status), fn ($query) => $query->where('status', '!=', 'clear'))
             ->orderByDesc('blocked')
             ->orderByDesc('score')
             ->paginate();
+
+        $unlisted = collect();
+
+        if (filled($search) && $suspects->total() === 0) {
+            $unlisted = User::query()
+                ->where('name', 'like', '%'.$search.'%')
+                ->orderBy('name')
+                ->limit(15)
+                ->get();
+        }
 
         return view('voteguard::admin.index', [
             'search' => $search,
@@ -43,6 +54,7 @@ class DashboardController extends Controller
             'countSuspect' => Suspect::query()->where('status', 'suspect')->count(),
             'countWatch' => Suspect::query()->where('status', 'watch')->count(),
             'countBlocked' => Suspect::query()->where('blocked', true)->count(),
+            'unlisted' => $unlisted,
         ]);
     }
 

@@ -68,6 +68,21 @@
                             @endif
                         </div>
                     </form>
+                    <form method="POST" action="{{ route('voteguard.admin.open') }}" class="row g-2 align-items-end mt-3 pt-3 border-top">
+                        @csrf
+                        <div class="col-sm-8">
+                            <label class="form-label" for="open-name">{{ trans('voteguard::admin.open_player') }}</label>
+                            <input type="text" class="form-control" id="open-name" name="name" required
+                                   value="{{ $search }}" placeholder="{{ trans('voteguard::admin.search_placeholder') }}"
+                                   autocomplete="off">
+                        </div>
+                        <div class="col-sm-4">
+                            <button type="submit" class="btn btn-outline-primary w-100">{{ trans('voteguard::admin.open_player_btn') }}</button>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-text">{{ trans('voteguard::admin.open_player_help') }}</div>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
@@ -156,11 +171,36 @@
                         </td>
                     </tr>
                 @empty
-                    <tr>
-                        <td colspan="6" class="text-center text-muted py-4">
-                            {{ ($search || $status) ? trans('voteguard::admin.empty_filter') : trans('voteguard::admin.empty') }}
-                        </td>
-                    </tr>
+                    @forelse ($unlisted as $user)
+                        <tr>
+                            <td>
+                                <div class="d-flex align-items-center gap-2">
+                                    <img src="{{ $user->getAvatar() }}" alt="" width="36" height="36" class="rounded">
+                                    <div>
+                                        <div class="fw-semibold">{{ $user->name }}</div>
+                                        <div class="text-muted small">#{{ $user->id }}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="text-muted">—</td>
+                            <td><span class="badge text-bg-secondary">{{ trans('voteguard::admin.status.clear') }}</span></td>
+                            <td class="text-muted">—</td>
+                            <td class="text-muted">—</td>
+                            <td class="text-end">
+                                <form method="POST" action="{{ route('voteguard.admin.open') }}">
+                                    @csrf
+                                    <input type="hidden" name="name" value="{{ $user->name }}">
+                                    <button type="submit" class="btn btn-sm btn-primary">{{ trans('voteguard::admin.open_player_btn') }}</button>
+                                </form>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">
+                                {{ ($search || $status) ? trans('voteguard::admin.empty_filter') : trans('voteguard::admin.empty') }}
+                            </td>
+                        </tr>
+                    @endforelse
                 @endforelse
                 </tbody>
             </table>

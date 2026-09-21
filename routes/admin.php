@@ -14,4 +14,5 @@ Route::middleware('can:voteguard.manage')->group(function () {
 
     Route::get('/suspects/{suspect}', [SuspectController::class, 'show'])->name('show');
     Route::post('/suspects/{suspect}', [SuspectController::class, 'update'])->name('update');
+    Route::post('/open', [SuspectController::class, 'open'])->name('open');
 });
