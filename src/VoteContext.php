@@ -16,6 +16,8 @@ class VoteContext
 
     public bool $skipReward = false;
 
+    public ?int $voteId = null;
+
     public ?string $token = null;
 
     /**
@@ -53,16 +55,6 @@ class VoteContext
         }
 
         return max(0, time() - $at);
-    }
-
-    public function pointerCount(): int
-    {
-        return (int) ($this->session['pointer'] ?? 0);
-    }
-
-    public function pageMs(): int
-    {
-        return (int) ($this->session['page_ms'] ?? 0);
     }
 
     public function webdriver(): bool

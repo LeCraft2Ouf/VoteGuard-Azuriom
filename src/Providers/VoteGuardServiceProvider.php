@@ -5,14 +5,19 @@ namespace Azuriom\Plugin\VoteGuard\Providers;
 use Azuriom\Extensions\Plugin\BasePluginServiceProvider;
 use Azuriom\Models\ActionLog;
 use Azuriom\Models\Permission;
+use Azuriom\Plugin\Vote\Models\Reward;
 use Azuriom\Plugin\Vote\Models\Vote;
 use Azuriom\Plugin\VoteGuard\Blocklist;
+use Azuriom\Plugin\VoteGuard\ClaimRecorder;
 use Azuriom\Plugin\VoteGuard\Commands\DebugPlayerCommand;
 use Azuriom\Plugin\VoteGuard\Commands\ScanVotesCommand;
 use Azuriom\Plugin\VoteGuard\Commands\StatsCommand;
+use Azuriom\Plugin\VoteGuard\Cooldowns;
 use Azuriom\Plugin\VoteGuard\Detector;
+use Azuriom\Plugin\VoteGuard\Honeypot;
 use Azuriom\Plugin\VoteGuard\Middleware\BlockBlacklistedVote;
 use Azuriom\Plugin\VoteGuard\Middleware\CaptureVoteRequest;
+use Azuriom\Plugin\VoteGuard\Models\Claim;
 use Azuriom\Plugin\VoteGuard\Observers\VoteObserver;
 use Azuriom\Plugin\VoteGuard\RewardGuard;
 use Azuriom\Plugin\VoteGuard\Settings;
@@ -45,6 +50,9 @@ class VoteGuardServiceProvider extends BasePluginServiceProvider
         $this->app->singleton(Settings::class);
         $this->app->singleton(Blocklist::class);
         $this->app->singleton(RewardGuard::class);
+        $this->app->singleton(Cooldowns::class);
+        $this->app->singleton(Honeypot::class);
+        $this->app->singleton(ClaimRecorder::class);
         $this->app->singleton(Detector::class);
     }
 
@@ -95,8 +103,8 @@ class VoteGuardServiceProvider extends BasePluginServiceProvider
             View::composer('vote::index', VotePageComposer::class);
         }
 
-        if (class_exists(\Azuriom\Plugin\Vote\Models\Reward::class)) {
-            \Azuriom\Plugin\Vote\Models\Reward::retrieved(function ($reward) {
+        if (class_exists(Reward::class)) {
+            Reward::retrieved(function ($reward) {
                 try {
                     app(RewardGuard::class)->stripReward($reward);
                 } catch (Throwable) {
@@ -118,6 +126,10 @@ class VoteGuardServiceProvider extends BasePluginServiceProvider
 
     protected function schedule(Schedule $schedule): void
     {
+        $schedule->call(function () {
+            Claim::query()->where('created_at', '<', now()->subDays(60))->delete();
+        })->name('voteguard-prune-claims')->dailyAt('04:10');
+
         $schedule->command('voteguard:scan --days=60 --limit=400')->dailyAt('04:20');
     }
 

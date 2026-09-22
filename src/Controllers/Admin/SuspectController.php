@@ -5,13 +5,16 @@ namespace Azuriom\Plugin\VoteGuard\Controllers\Admin;
 use Azuriom\Http\Controllers\Controller;
 use Azuriom\Models\ActionLog;
 use Azuriom\Models\User;
+use Azuriom\Plugin\Vote\Models\Site;
 use Azuriom\Plugin\VoteGuard\Blocklist;
 use Azuriom\Plugin\VoteGuard\Detector;
+use Azuriom\Plugin\VoteGuard\Models\Claim;
 use Azuriom\Plugin\VoteGuard\Models\Suspect;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Throwable;
 
 class SuspectController extends Controller
 {
@@ -24,11 +27,25 @@ class SuspectController extends Controller
             ->limit(50)
             ->get();
 
+        try {
+            $claims = Claim::query()
+                ->where('user_id', $suspect->user_id)
+                ->where('created_at', '>=', now()->subDays(14))
+                ->latest('id')
+                ->limit(30)
+                ->get();
+        } catch (Throwable) {
+            $claims = collect();
+        }
+
         return view('voteguard::admin.show', [
             'suspect' => $suspect,
             'detections' => $detections,
             'intervals' => $detector->intervalRows($suspect->user_id, 50),
             'mix' => $detector->patternAnalysis($suspect->user_id),
+            'claims' => $claims,
+            'claimStats' => $detector->claimAnalysis($suspect->user_id),
+            'siteNames' => class_exists(Site::class) ? Site::query()->pluck('name', 'id') : collect(),
         ]);
     }
 

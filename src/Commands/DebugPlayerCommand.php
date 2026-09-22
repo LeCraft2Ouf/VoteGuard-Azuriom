@@ -48,6 +48,10 @@ class DebugPlayerCommand extends Command
 
         $this->info('score='.$score);
         $this->info('mix snipers='.$mix['snipers'].' tight='.$mix['tight'].' near='.($mix['nears'] ?? 0).' classic='.$mix['classic'].' sleep='.$mix['sleeps'].' awake='.$mix['awake']);
+        $this->info('remplissage='.($mix['fill'] ?? '—').'% site='.($mix['fill_site'] ?? '—'));
+
+        $claims = $detector->claimAnalysis($user->id);
+        $this->info('reclamations_14j='.$claims['n'].' ratios='.json_encode($claims['ratios']).' ips='.$claims['ips'].' autres_comptes_ip='.$claims['farm'].' piege='.$claims['honeypot']);
         $this->info('flags='.json_encode($suspect->last_flags ?? []));
         $this->info('status='.($suspect->status ?? 'none'));
 

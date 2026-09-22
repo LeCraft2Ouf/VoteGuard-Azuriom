@@ -9,6 +9,11 @@ use Illuminate\Support\Facades\Cache;
 
 class SessionController extends Controller
 {
+    /**
+     * Les joueurs laissent l'onglet vote ouvert pendant tout le cooldown (jusqu'à 3 h).
+     */
+    private const TTL_HOURS = 12;
+
     public function store(Request $request): JsonResponse
     {
         $token = bin2hex(random_bytes(16));
@@ -21,7 +26,7 @@ class SessionController extends Controller
             'page_ms' => 0,
             'webdriver' => $request->boolean('webdriver'),
             'clicks' => [],
-        ], now()->addMinutes(45));
+        ], now()->addHours(self::TTL_HOURS));
 
         return response()->json(['token' => $token]);
     }
@@ -45,13 +50,13 @@ class SessionController extends Controller
 
         $session['pointer'] = max((int) ($session['pointer'] ?? 0), (int) ($data['pointer'] ?? 0));
         $session['page_ms'] = max((int) ($session['page_ms'] ?? 0), (int) ($data['page_ms'] ?? 0));
-        $session['webdriver'] = $session['webdriver'] || ($request->boolean('webdriver'));
+        $session['webdriver'] = ($session['webdriver'] ?? false) || $request->boolean('webdriver');
 
         if (! empty($data['site'])) {
             $session['clicks'][(string) $data['site']] = now()->timestamp;
         }
 
-        Cache::put($key, $session, now()->addMinutes(45));
+        Cache::put($key, $session, now()->addHours(self::TTL_HOURS));
 
         return response()->json(['ok' => true]);
     }

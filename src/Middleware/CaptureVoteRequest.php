@@ -2,11 +2,13 @@
 
 namespace Azuriom\Plugin\VoteGuard\Middleware;
 
+use Azuriom\Plugin\VoteGuard\ClaimRecorder;
 use Azuriom\Plugin\VoteGuard\VoteContext;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpFoundation\Response;
+use Throwable;
 
 class CaptureVoteRequest
 {
@@ -24,6 +26,19 @@ class CaptureVoteRequest
         }
 
         return $next($request);
+    }
+
+    public function terminate(Request $request, Response $response): void
+    {
+        if (! $this->context->fromVoteDone) {
+            return;
+        }
+
+        try {
+            app(ClaimRecorder::class)->record($request, $response);
+        } catch (Throwable) {
+            //
+        }
     }
 
     private function isVoteDone(Request $request): bool
@@ -48,7 +63,9 @@ class CaptureVoteRequest
         $this->context->userAgent = $request->userAgent();
         $this->context->acceptLanguage = $request->header('Accept-Language');
         $this->context->accept = $request->header('Accept');
-        $this->context->token = $request->header('X-VoteGuard-Token')
+        $this->context->token = $request->header('X-Request-Ref')
+            ?: $request->header('X-VoteGuard-Token')
+            ?: $request->input('_ref')
             ?: $request->input('voteguard_token');
 
         if (is_string($this->context->token) && preg_match('/^[a-f0-9]{32}$/', $this->context->token) === 1) {

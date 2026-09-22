@@ -5,6 +5,7 @@ namespace Azuriom\Plugin\VoteGuard\Commands;
 use Azuriom\Models\User;
 use Azuriom\Plugin\Vote\Models\Site;
 use Azuriom\Plugin\Vote\Models\Vote;
+use Azuriom\Plugin\VoteGuard\Cooldowns;
 use Azuriom\Plugin\VoteGuard\Detector;
 use Azuriom\Plugin\VoteGuard\Models\Suspect;
 use Azuriom\Plugin\VoteGuard\Settings;
@@ -17,7 +18,7 @@ class StatsCommand extends Command
 
     protected $description = 'Dump des écarts de vote pour régler VoteGuard (n’écrit rien)';
 
-    public function handle(Detector $detector, Settings $settings): int
+    public function handle(Detector $detector, Settings $settings, Cooldowns $cooldowns): int
     {
         if (! class_exists(Vote::class)) {
             $this->error('Plugin Vote introuvable.');
@@ -36,10 +37,13 @@ class StatsCommand extends Command
             ? Site::query()->get()->keyBy('id')
             : collect();
 
-        $this->table(['site_id', 'name', 'delay_min'], $sites->map(fn ($site) => [
+        $learned = $cooldowns->refresh();
+
+        $this->table(['site_id', 'name', 'delay_min', 'appris_min'], $sites->map(fn ($site) => [
             $site->id,
             $site->name,
             $site->vote_delay,
+            isset($learned[$site->id]) ? intdiv($learned[$site->id], 60) : '—',
         ])->all());
 
         $kinds = ['early' => 0, 'sniper' => 0, 'tight' => 0, 'near' => 0, 'classic' => 0, 'sleep' => 0];
@@ -55,6 +59,7 @@ class StatsCommand extends Command
         ];
         $users = [];
         $prev = [];
+        $stamps = [];
         $votes = 0;
 
         $query = Vote::query()
@@ -137,7 +142,26 @@ class StatsCommand extends Command
             }
 
             $prev[$key] = Carbon::parse($vote->created_at);
+            $stamps[$userId][$siteId][] = $prev[$key]->getTimestamp();
         }
+
+        foreach ($stamps as $userId => $bySite) {
+            $best = null;
+
+            foreach ($bySite as $siteId => $list) {
+                $fill = $detector->fillRate($list, $detector->siteDelay($sites->get($siteId)));
+
+                if ($fill !== null && ($best === null || $fill > $best)) {
+                    $best = $fill;
+                }
+            }
+
+            if (isset($users[$userId])) {
+                $users[$userId]['fill'] = $best !== null ? (int) round($best * 100) : null;
+            }
+        }
+
+        unset($stamps);
 
         $kindTotal = max(1, array_sum($kinds));
         $this->info("votes={$votes} joueurs=".count($users));
@@ -156,13 +180,29 @@ class StatsCommand extends Command
         ];
         $ranked = [];
         $ratios = [];
+        $fills = [];
+        $fillBands = ['<50' => 0, '50-59' => 0, '60-69' => 0, '70-79' => 0, '80+' => 0, 'n/a' => 0];
 
         foreach ($users as $userId => $row) {
             $scored = $detector->scoreMix($row);
             $score = $scored['score'];
             $flags = $scored['flags'];
+            $fill = $row['fill'] ?? null;
 
-            if ($row['awake'] < $min) {
+            if ($fill === null) {
+                $fillBands['n/a']++;
+            } else {
+                $fills[] = $fill;
+                $fillBands[match (true) {
+                    $fill >= 80 => '80+',
+                    $fill >= 70 => '70-79',
+                    $fill >= 60 => '60-69',
+                    $fill >= 50 => '50-59',
+                    default => '<50',
+                }]++;
+            }
+
+            if ($row['awake'] < $min && $fill === null) {
                 $bands['ignore']++;
 
                 continue;
@@ -190,11 +230,22 @@ class StatsCommand extends Command
                 'sleeps' => $row['sleeps'],
                 'awake' => $row['awake'],
                 'votes' => $row['votes'],
+                'fill' => $fill,
                 'flags' => implode(',', $flags),
             ];
         }
 
         $this->table(['score', 'joueurs'], collect($bands)->map(fn ($n, $k) => [$k, $n])->values()->all());
+        $this->table(['remplissage%', 'joueurs'], collect($fillBands)->map(fn ($n, $k) => [$k, $n])->values()->all());
+
+        sort($fills);
+        $nFills = count($fills);
+        if ($nFills > 0) {
+            $this->info('remplissage% p50='.$fills[(int) floor(($nFills - 1) * 0.50)].
+                ' p75='.$fills[(int) floor(($nFills - 1) * 0.75)].
+                ' p90='.$fills[(int) floor(($nFills - 1) * 0.90)].
+                ' p99='.$fills[(int) floor(($nFills - 1) * 0.99)]);
+        }
 
         sort($ratios);
         $nRatios = count($ratios);
@@ -212,7 +263,7 @@ class StatsCommand extends Command
 
         $this->info('top 25');
         $this->table(
-            ['name', 'id', 'score', 'votes', 'sniper', 'tight', 'near', 'classic', 'sleep', 'flags', 'bdd_score', 'bdd_status'],
+            ['name', 'id', 'score', 'votes', 'fill%', 'sniper', 'tight', 'near', 'classic', 'sleep', 'flags', 'bdd_score', 'bdd_status'],
             array_map(function (array $row) use ($names, $stored) {
                 $suspect = $stored->get($row['id']);
 
@@ -221,6 +272,7 @@ class StatsCommand extends Command
                     $row['id'],
                     $row['score'],
                     $row['votes'],
+                    $row['fill'] ?? '—',
                     $row['snipers'],
                     $row['tight'],
                     $row['nears'] ?? 0,

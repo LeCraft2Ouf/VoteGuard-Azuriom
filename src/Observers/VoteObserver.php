@@ -6,6 +6,7 @@ use Azuriom\Models\User;
 use Azuriom\Plugin\Vote\Models\Vote;
 use Azuriom\Plugin\VoteGuard\Detector;
 use Azuriom\Plugin\VoteGuard\RewardGuard;
+use Azuriom\Plugin\VoteGuard\VoteContext;
 use Throwable;
 
 class VoteObserver
@@ -28,9 +29,17 @@ class VoteObserver
     public function created(Vote $vote): void
     {
         try {
-            app(Detector::class)->handleLive($vote);
+            app(VoteContext::class)->voteId = (int) $vote->id;
         } catch (Throwable) {
-            // Ne jamais casser le vote si l’analyse échoue.
+            //
         }
+
+        app()->terminating(function () use ($vote) {
+            try {
+                app(Detector::class)->handleLive($vote);
+            } catch (Throwable) {
+                // Ne jamais casser le vote si l'analyse échoue.
+            }
+        });
     }
 }

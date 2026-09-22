@@ -120,6 +120,23 @@
                             </div>
                         @endif
 
+                        @if (($mix['fill'] ?? null) !== null)
+                            @php
+                                $fill = (int) $mix['fill'];
+                                $fillBar = $fill >= 70 ? 'bg-danger' : ($fill >= 60 ? 'bg-warning' : ($fill >= 50 ? 'bg-info' : 'bg-success'));
+                            @endphp
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between small text-muted mb-1">
+                                    <span>{{ trans('voteguard::admin.show.fill') }}</span>
+                                    <span class="fw-semibold">{{ $fill }} % · {{ $mix['fill_site'] }}</span>
+                                </div>
+                                <div class="progress vg-mix">
+                                    <div class="progress-bar {{ $fillBar }}" style="width: {{ min(100, $fill) }}%"></div>
+                                </div>
+                                <div class="form-text">{{ trans('voteguard::admin.show.fill_help') }}</div>
+                            </div>
+                        @endif
+
                         @if (($suspect->last_flags ?? []) !== [])
                             <div>
                                 <div class="small text-muted mb-1">{{ trans('voteguard::admin.fields.flags') }}</div>
@@ -168,6 +185,65 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header d-flex flex-wrap gap-2 justify-content-between align-items-center">
+            <span>{{ trans('voteguard::admin.show.claims') }}</span>
+            @if (($claimStats['n'] ?? 0) > 0)
+                @php($r = $claimStats['ratios'] ?? [])
+                <div class="d-flex flex-wrap gap-3 small">
+                    <span>{{ trans('voteguard::admin.claims.total') }} <strong>{{ $claimStats['n'] }}</strong></span>
+                    <span>{{ trans('voteguard::admin.claims.no_session') }} <strong>{{ round(($r['no_session'] ?? 0) * 100) }} %</strong></span>
+                    <span>{{ trans('voteguard::admin.claims.not_browser') }} <strong>{{ round(($r['not_browser'] ?? 0) * 100) }} %</strong></span>
+                    <span>{{ trans('voteguard::admin.claims.guest') }} <strong>{{ round(($r['guest'] ?? 0) * 100) }} %</strong></span>
+                    <span>{{ trans('voteguard::admin.claims.hosting') }} <strong>{{ round(($r['hosting'] ?? 0) * 100) }} %</strong></span>
+                    <span>{{ trans('voteguard::admin.claims.ips') }} <strong>{{ $claimStats['ips'] }}</strong></span>
+                    <span>{{ trans('voteguard::admin.claims.farm') }} <strong>{{ $claimStats['farm'] }}</strong></span>
+                </div>
+            @endif
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-striped mb-0">
+                <thead>
+                <tr>
+                    <th>{{ trans('voteguard::admin.fields.date') }}</th>
+                    <th>{{ trans('voteguard::admin.fields.site') }}</th>
+                    <th>{{ trans('voteguard::admin.fields.outcome') }}</th>
+                    <th>{{ trans('voteguard::admin.fields.ip') }}</th>
+                    <th>{{ trans('voteguard::admin.fields.country') }}</th>
+                    <th>{{ trans('voteguard::admin.fields.flags') }}</th>
+                    <th>{{ trans('voteguard::admin.fields.ua') }}</th>
+                </tr>
+                </thead>
+                <tbody>
+                @forelse ($claims as $claim)
+                    <tr>
+                        <td class="text-nowrap">{{ $claim->created_at?->format('d/m/Y H:i:s') }}</td>
+                        <td>{{ $siteNames[$claim->site_id] ?? ($claim->site_id ? '#'.$claim->site_id : '—') }}</td>
+                        <td class="text-nowrap">
+                            {{ trans('voteguard::admin.outcomes.'.$claim->outcome) }}
+                            @if ($claim->pendings > 0)
+                                <span class="text-muted small">({{ $claim->pendings }}×)</span>
+                            @endif
+                        </td>
+                        <td class="small text-nowrap">{{ $claim->ip ?? '—' }}@if ($claim->asn) <span class="text-muted">AS{{ $claim->asn }}</span>@endif</td>
+                        <td>{{ $claim->country ?? '—' }}</td>
+                        <td>@include('voteguard::admin.partials.flags', ['flags' => $claim->flags ?? [], 'limit' => 4])</td>
+                        <td class="small text-break" title="{{ $claim->user_agent }}">
+                            {{ \Illuminate\Support\Str::limit($claim->user_agent ?? '—', 60) }}
+                        </td>
+                    </tr>
+                @empty
+                    <tr>
+                        <td colspan="7" class="text-muted text-center py-3">
+                            {{ trans('voteguard::admin.show.no_claims') }}
+                        </td>
+                    </tr>
+                @endforelse
+                </tbody>
+            </table>
         </div>
     </div>
 

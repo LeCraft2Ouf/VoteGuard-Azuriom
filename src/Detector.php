@@ -5,6 +5,7 @@ namespace Azuriom\Plugin\VoteGuard;
 use Azuriom\Models\User;
 use Azuriom\Plugin\Vote\Models\Site;
 use Azuriom\Plugin\Vote\Models\Vote;
+use Azuriom\Plugin\VoteGuard\Models\Claim;
 use Azuriom\Plugin\VoteGuard\Models\Detection;
 use Azuriom\Plugin\VoteGuard\Models\Suspect;
 use Carbon\Carbon;
@@ -15,23 +16,12 @@ use Throwable;
 
 class Detector
 {
-    private const BOT_UA = '/headlesschrome|puppeteer|playwright|selenium|webdriver|phantomjs|python-requests|python-urllib|aiohttp\/|httpx\/|curl\/|wget\/|go-http-client|okhttp|apache-httpclient|java\/|libwww-perl|scrapy|httpie|node-fetch|undici|axios\/\d|postmanruntime|insomnia|guzzlehttp/i';
-
     /**
      * @var array<string, int>
      */
-    private const WEIGHTS = [
-        'no_session' => 25,
-        'no_click' => 20,
-        'no_pointer' => 10,
-        'too_fast' => 15,
-        'webdriver' => 35,
+    private const LIVE_WEIGHTS = [
         'bot_ua' => 40,
-        'thin_headers' => 15,
-        'regular_interval' => 35,
-        'cooldown_sniper' => 30,
-        'always_on' => 30,
-        'ip_farm' => 20,
+        'webdriver' => 35,
     ];
 
     private const SNIPER_POINTS = 100;
@@ -46,9 +36,29 @@ class Detector
 
     private const MIN_FLAG_AWAKE = 12;
 
+    private const FILL_WINDOW = 14 * 86400;
+
+    private const FILL_MIN_SPAN = 7 * 86400;
+
+    private const FILL_MIN_VOTES = 12;
+
+    private const FILL_MAX_COOLDOWN = 6 * 3600;
+
+    private const CLAIM_DAYS = 14;
+
+    private const CLAIM_MIN = 6;
+
+    private const CLAIM_RATIO = 0.8;
+
+    /**
+     * Au-delà, le signal touche la majorité des joueurs : c'est l'infra (proxy, thème) qui le casse, pas des bots.
+     */
+    private const GLOBAL_BREAKER = 0.6;
+
     public function __construct(
         private Settings $settings,
         private VoteContext $context,
+        private Cooldowns $cooldowns,
     ) {}
 
     public function handleLive(Vote $vote): void
@@ -63,13 +73,10 @@ class Detector
             return;
         }
 
-        $pattern = $this->patternAnalysis($user->id);
-        $requestFlags = array_merge(
-            $this->requestFlags($vote),
-            $this->ipFarmFlags($user->id),
-        );
-        $flags = array_values(array_unique(array_merge($pattern['flags'], $requestFlags)));
-        $score = min(100, $pattern['score'] + $this->score($requestFlags));
+        $analysis = $this->analyze($user->id);
+        $live = $this->liveFlags();
+        $flags = array_values(array_unique(array_merge($analysis['flags'], $live)));
+        $score = min(100, $analysis['score'] + $this->weight($live));
 
         if ($score < $this->settings->watchScore()) {
             return;
@@ -115,9 +122,9 @@ class Detector
 
         [$from, $to] = $this->period($from, $to);
 
-        $pattern = $this->patternAnalysis($userId, $from, $to);
-        $score = $pattern['score'];
-        $flags = $pattern['flags'];
+        $analysis = $this->analyze($userId, $from, $to);
+        $score = $analysis['score'];
+        $flags = $analysis['flags'];
 
         if ($score < $this->settings->watchScore()) {
             $this->downgradeExisting($user, $score, $flags);
@@ -131,6 +138,22 @@ class Detector
     }
 
     /**
+     * @return array{score: int, flags: list<string>, pattern: array<string, mixed>, claims: array<string, mixed>}
+     */
+    public function analyze(int $userId, ?Carbon $from = null, ?Carbon $to = null): array
+    {
+        $pattern = $this->patternAnalysis($userId, $from, $to);
+        $claims = $this->claimAnalysis($userId);
+
+        return [
+            'score' => min(100, max($pattern['score'], $claims['floor']) + $claims['bonus']),
+            'flags' => array_values(array_unique(array_merge($pattern['flags'], $claims['flags']))),
+            'pattern' => $pattern,
+            'claims' => $claims,
+        ];
+    }
+
+    /**
      * @return array{scanned: int, flagged: int, offset: int, total: int, done: bool}
      */
     public function scanRecent(int $days = 60, int $limit = 400, int $offset = 0, ?int $chunk = null, ?Carbon $from = null, ?Carbon $to = null): array
@@ -139,6 +162,14 @@ class Detector
 
         if (! class_exists(Vote::class)) {
             return $empty;
+        }
+
+        if ($offset === 0) {
+            try {
+                $this->cooldowns->refresh();
+            } catch (Throwable) {
+                //
+            }
         }
 
         [$from, $to] = $this->period($from ?? now()->subDays($days), $to ?? now());
@@ -159,7 +190,10 @@ class Detector
         $extraIds = Suspect::query()
             ->whereNotIn('status', ['confirmed', 'false_positive'])
             ->whereNotIn('user_id', $userIds)
-            ->pluck('user_id');
+            ->pluck('user_id')
+            ->concat($this->trapUserIds())
+            ->unique()
+            ->reject(fn ($id) => $userIds->contains($id));
 
         $userIds = $userIds->concat($extraIds)->values();
         $total = $userIds->count();
@@ -187,7 +221,7 @@ class Detector
     }
 
     /**
-     * @return list<array{site: string, at: string, gap: ?int, expected: int, sniper: bool}>
+     * @return list<array<string, mixed>>
      */
     public function intervalRows(int $userId, int $take = 25): array
     {
@@ -209,16 +243,13 @@ class Detector
 
         foreach ($votes as $vote) {
             $siteId = (int) $vote->site_id;
-            $expected = $this->expectedDelay($vote->site);
+            $expected = $this->cooldowns->for($vote->site);
             $gap = null;
-            $sniper = false;
-
             $kind = 'first';
 
             if (isset($lastBySite[$siteId])) {
                 $gap = (int) $vote->created_at->diffInSeconds($lastBySite[$siteId], true);
                 $kind = $this->gapKind($gap, $expected);
-                $sniper = $kind === 'sniper';
             }
 
             $rows[] = [
@@ -233,7 +264,7 @@ class Detector
                 'delta_label' => $gap === null
                     ? '—'
                     : (($gap - $expected >= 0 ? '+' : '−').$this->formatDuration(abs($gap - $expected))),
-                'sniper' => $sniper,
+                'sniper' => $kind === 'sniper',
                 'kind' => $kind,
             ];
 
@@ -244,59 +275,10 @@ class Detector
     }
 
     /**
-     * @return list<string>
-     */
-    private function requestFlags(Vote $vote): array
-    {
-        if (! $this->context->fromVoteDone) {
-            return [];
-        }
-
-        $flags = [];
-
-        if (! $this->context->hasSession()) {
-            $flags[] = 'no_session';
-        } else {
-            if (! $this->context->hasClick($vote->site_id)) {
-                $flags[] = 'no_click';
-            }
-
-            if ($this->context->pointerCount() < 3 && $this->context->pageMs() < 1500) {
-                $flags[] = 'no_pointer';
-            }
-
-            $age = $this->context->clickAgeSeconds($vote->site_id);
-
-            if ($age !== null && $age < 4) {
-                $flags[] = 'too_fast';
-            }
-
-            if ($this->context->webdriver()) {
-                $flags[] = 'webdriver';
-            }
-        }
-
-        $ua = (string) $this->context->userAgent;
-
-        if ($ua === '' || preg_match(self::BOT_UA, $ua) === 1) {
-            $flags[] = 'bot_ua';
-        }
-
-        $lang = trim((string) $this->context->acceptLanguage);
-        $accept = strtolower((string) $this->context->accept);
-
-        if ($lang === '' && ($accept === '' || $accept === '*/*')) {
-            $flags[] = 'thin_headers';
-        }
-
-        return $flags;
-    }
-
-    /**
      * Score = moyenne des votes éveillés, pondérée par le volume.
      * Sniper = 100, limite (+3–8 min) = 40, aléa (+8–25 min) = 25, classique = 0.
      *
-     * @return array{score: int, flags: list<string>, snipers: int, tight: int, nears: int, classic: int, sleeps: int, awake: int, total: int}
+     * @return array<string, mixed>
      */
     public function patternAnalysis(int $userId, ?Carbon $from = null, ?Carbon $to = null): array
     {
@@ -310,6 +292,8 @@ class Detector
             'sleeps' => 0,
             'awake' => 0,
             'total' => 0,
+            'fill' => null,
+            'fill_site' => null,
             'offsets' => [],
         ];
 
@@ -318,6 +302,7 @@ class Detector
         }
 
         [$from, $to] = $this->period($from, $to);
+        $timezone = (string) config('app.timezone', 'Europe/Paris');
 
         $siteIds = Vote::query()
             ->where('user_id', $userId)
@@ -329,27 +314,37 @@ class Detector
         $suspicions = [];
         $nightVotes = 0;
         $rawVotes = 0;
+        $bestFill = null;
 
         foreach ($siteIds as $siteId) {
+            $stamps = [];
+
             $votes = Vote::query()
                 ->where('user_id', $userId)
                 ->where('site_id', (int) $siteId)
                 ->whereBetween('created_at', [$from, $to])
                 ->orderBy('created_at')
-                ->pluck('created_at')
-                ->values();
+                ->pluck('created_at');
 
             foreach ($votes as $at) {
+                $date = Carbon::parse($at);
+                $stamps[] = $date->getTimestamp();
                 $rawVotes++;
-                $hour = Carbon::parse($at)->timezone(config('app.timezone', 'Europe/Paris'))->hour;
 
-                if ($hour < 6) {
+                if ($date->copy()->timezone($timezone)->hour < 6) {
                     $nightVotes++;
                 }
             }
 
             $site = class_exists(Site::class) ? Site::find($siteId) : null;
-            $part = $this->classifyTimestamps($votes, $this->expectedDelay($site));
+            $expected = $this->cooldowns->for($site);
+            $part = $this->classifyStamps($stamps, $expected);
+            $fill = $this->fillRate($stamps, $expected);
+
+            if ($fill !== null && ($bestFill === null || $fill > $bestFill)) {
+                $bestFill = $fill;
+                $merged['fill_site'] = $site->name ?? '#'.$siteId;
+            }
 
             $suspicions = array_merge($suspicions, $part['suspicions']);
             $merged['snipers'] += $part['snipers'];
@@ -361,13 +356,15 @@ class Detector
             $merged['offsets'] = array_merge($merged['offsets'], $part['offsets']);
         }
 
-        $awake = count($suspicions);
-        $merged['awake'] = $awake;
+        $merged['awake'] = count($suspicions);
+        $merged['fill'] = $bestFill !== null ? (int) round($bestFill * 100) : null;
+
         $scored = $this->scoreMix($merged + [
             'sum' => array_sum($suspicions),
             'night_votes' => $nightVotes,
             'raw_votes' => $rawVotes,
         ]);
+
         $merged['score'] = $scored['score'];
         $merged['flags'] = $scored['flags'];
         unset($merged['offsets']);
@@ -376,78 +373,260 @@ class Detector
     }
 
     /**
-     * @param  array{snipers: int, tight: int, nears?: int, classic?: int, sleeps: int, total: int, awake: int, sum?: int, offsets?: list<int>, night_votes?: int, raw_votes?: int}  $mix
+     * @param  array<string, mixed>  $mix
      * @return array{score: int, flags: list<string>}
      */
     public function scoreMix(array $mix): array
     {
         $awake = (int) ($mix['awake'] ?? 0);
         $min = $this->settings->minVotes();
-
-        if ($awake < $min) {
-            return ['score' => 0, 'flags' => []];
-        }
-
-        $snipers = (int) ($mix['snipers'] ?? 0);
-        $tight = (int) ($mix['tight'] ?? 0);
-        $nears = (int) ($mix['nears'] ?? 0);
-        $sleeps = (int) ($mix['sleeps'] ?? 0);
-        $total = max(1, (int) ($mix['total'] ?? 0));
-        $sum = (int) ($mix['sum'] ?? (
-            $snipers * self::SNIPER_POINTS
-            + $tight * self::TIGHT_POINTS
-            + $nears * self::NEAR_POINTS
-        ));
-        $avg = $sum / $awake;
-        $score = (int) round($avg * min(1.0, $awake / self::CONFIDENCE_AWAKE));
-        $sniperRatio = $snipers / $awake;
-        $botRatio = ($snipers + $tight) / $awake;
-        $scheduledRatio = ($snipers + $tight + $nears) / $awake;
-        $sleepRatio = $sleeps / $total;
+        $fill = isset($mix['fill']) ? (int) $mix['fill'] : null;
+        $score = 0;
         $flags = [];
 
-        if ($awake >= self::MIN_FLAG_AWAKE && $snipers >= $min && $sniperRatio >= 0.40) {
-            $flags[] = 'cooldown_sniper';
-        }
+        if ($awake >= $min) {
+            $snipers = (int) ($mix['snipers'] ?? 0);
+            $tight = (int) ($mix['tight'] ?? 0);
+            $nears = (int) ($mix['nears'] ?? 0);
+            $sleeps = (int) ($mix['sleeps'] ?? 0);
+            $total = max(1, (int) ($mix['total'] ?? 0));
+            $sum = (int) ($mix['sum'] ?? (
+                $snipers * self::SNIPER_POINTS
+                + $tight * self::TIGHT_POINTS
+                + $nears * self::NEAR_POINTS
+            ));
+            $score = (int) round(($sum / $awake) * min(1.0, $awake / self::CONFIDENCE_AWAKE));
+            $sniperRatio = $snipers / $awake;
+            $botRatio = ($snipers + $tight) / $awake;
+            $scheduledRatio = ($snipers + $tight + $nears) / $awake;
+            $sleepRatio = $sleeps / $total;
+            $busy = $fill !== null && $fill >= 50;
 
-        if ($awake >= self::MIN_FLAG_AWAKE && $sniperRatio >= 0.35 && $botRatio >= 0.50) {
-            $flags[] = 'regular_interval';
-        }
+            if ($awake >= self::MIN_FLAG_AWAKE && $snipers >= $min && $sniperRatio >= 0.40) {
+                $flags[] = 'cooldown_sniper';
+            }
 
-        if ($this->isJitterClock($mix['offsets'] ?? [], $min)) {
-            if (! in_array('regular_interval', $flags, true)) {
+            if ($awake >= self::MIN_FLAG_AWAKE && $sniperRatio >= 0.35 && $botRatio >= 0.50) {
                 $flags[] = 'regular_interval';
             }
-            $score = max($score, 48);
+
+            if ($busy && $this->isJitterClock($mix['offsets'] ?? [], $min)) {
+                $flags[] = 'regular_interval';
+                $score = max($score, 45);
+            }
+
+            if ($busy && $awake >= self::MIN_FLAG_AWAKE && $scheduledRatio >= 0.60) {
+                $flags[] = 'scheduled_vote';
+                $score = max($score, $scheduledRatio >= 0.75 && $awake >= 16 ? 50 : 40);
+            }
+
+            $rawVotes = (int) ($mix['raw_votes'] ?? 0);
+            $nightVotes = (int) ($mix['night_votes'] ?? 0);
+
+            if ($busy && $rawVotes >= 24 && $nightVotes >= 8 && $nightVotes / $rawVotes >= 0.16) {
+                $flags[] = 'night_vote';
+                $score = min(100, $score + 5);
+            }
+
+            if ($total >= 20 && $sleepRatio <= 0.15 && ($sniperRatio >= 0.40 || ($busy && $scheduledRatio >= 0.50))) {
+                $flags[] = 'always_on';
+                $score = min(100, $score + 10);
+            }
         }
 
-        if ($awake >= self::MIN_FLAG_AWAKE && $scheduledRatio >= 0.60) {
-            $flags[] = 'scheduled_vote';
-            $score = max($score, $scheduledRatio >= 0.75 && $awake >= 16 ? 55 : 35);
+        if ($fill !== null && $fill >= 60) {
+            $flags[] = 'high_fill';
+            $timed = in_array('scheduled_vote', $flags, true) || in_array('cooldown_sniper', $flags, true);
+            $score = max($score, match (true) {
+                $fill >= 80 => 90,
+                $fill >= 70 => $timed ? 80 : 65,
+                default => $timed ? 60 : 40,
+            });
         }
 
-        $rawVotes = (int) ($mix['raw_votes'] ?? 0);
-        $nightVotes = (int) ($mix['night_votes'] ?? 0);
-        $nightRatio = $rawVotes > 0 ? $nightVotes / $rawVotes : 0;
-
-        if ($rawVotes >= 24 && $nightVotes >= 8 && $nightRatio >= 0.16) {
-            $flags[] = 'night_vote';
-            $score = max($score, 42);
-        }
-
-        if ($total >= 20 && $sleepRatio <= 0.15 && $scheduledRatio >= 0.50) {
-            $flags[] = 'always_on';
-            $score = min(100, $score + 10);
-        }
-
-        return ['score' => min(100, $score), 'flags' => $flags];
+        return ['score' => min(100, $score), 'flags' => array_values(array_unique($flags))];
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, mixed>  $timestamps
+     * Part des créneaux de vote utilisés sur le site, sur les 14 derniers jours d'activité.
+     *
+     * @param  list<int>  $stamps
+     */
+    public function fillRate(array $stamps, int $expected): ?float
+    {
+        $count = count($stamps);
+
+        if ($count < self::FILL_MIN_VOTES || $expected <= 0 || $expected > self::FILL_MAX_COOLDOWN) {
+            return null;
+        }
+
+        sort($stamps);
+        $end = $stamps[$count - 1];
+        $start = max($stamps[0], $end - self::FILL_WINDOW);
+        $span = $end - $start;
+
+        if ($span < self::FILL_MIN_SPAN) {
+            return null;
+        }
+
+        $inWindow = 0;
+
+        foreach ($stamps as $stamp) {
+            if ($stamp >= $start) {
+                $inWindow++;
+            }
+        }
+
+        if ($inWindow < self::FILL_MIN_VOTES) {
+            return null;
+        }
+
+        return min(1.0, $inWindow / (intdiv($span, $expected) + 1));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function claimAnalysis(int $userId): array
+    {
+        $out = [
+            'n' => 0,
+            'flags' => [],
+            'floor' => 0,
+            'bonus' => 0,
+            'ratios' => [],
+            'ips' => 0,
+            'farm' => 0,
+            'honeypot' => 0,
+        ];
+
+        try {
+            $rows = Claim::query()
+                ->where('user_id', $userId)
+                ->where('created_at', '>=', now()->subDays(self::CLAIM_DAYS))
+                ->get(['outcome', 'flags', 'ip']);
+        } catch (Throwable) {
+            return $out;
+        }
+
+        $has = fn (Claim $claim, string $flag) => in_array($flag, $claim->flags ?? [], true);
+        $rewarded = $rows->filter(fn (Claim $claim) => in_array($claim->outcome, Claim::REWARDED, true))->values();
+        $withSession = $rewarded->reject(fn (Claim $claim) => $has($claim, 'no_session'));
+        $n = $rewarded->count();
+        $ratio = fn (int $count, int $of) => $of > 0 ? round($count / $of, 2) : 0.0;
+        $ips = $rewarded->pluck('ip')->filter()->unique()->values();
+
+        $out['n'] = $n;
+        $out['ips'] = $ips->count();
+        $out['honeypot'] = $rows->filter(fn (Claim $claim) => $has($claim, 'honeypot'))->count();
+        $out['ratios'] = [
+            'no_session' => $ratio($rewarded->filter(fn ($c) => $has($c, 'no_session'))->count(), $n),
+            'no_click' => $ratio($withSession->filter(fn ($c) => $has($c, 'no_click'))->count(), $withSession->count()),
+            'not_browser' => $ratio($rewarded->filter(fn ($c) => $has($c, 'no_sec_fetch') || $has($c, 'bot_ua'))->count(), $n),
+            'ua_spoof' => $ratio($rewarded->filter(fn ($c) => $has($c, 'ua_spoof'))->count(), $n),
+            'guest' => $ratio($rewarded->filter(fn ($c) => $has($c, 'guest'))->count(), $n),
+            'hosting' => $ratio($rewarded->filter(fn ($c) => $has($c, 'datacenter'))->count(), $n),
+        ];
+
+        $r = $out['ratios'];
+
+        if ($out['honeypot'] > 0) {
+            $out['flags'][] = 'honeypot';
+            $out['floor'] = 100;
+        }
+
+        if ($n >= self::CLAIM_MIN) {
+            if ($r['not_browser'] >= self::CLAIM_RATIO && $this->signalHealthy('no_sec_fetch')) {
+                $out['flags'][] = 'not_browser';
+                $out['floor'] = max($out['floor'], $n >= 10 ? 85 : 60);
+            }
+
+            if ($r['ua_spoof'] >= self::CLAIM_RATIO && $this->signalHealthy('ua_spoof')) {
+                $out['flags'][] = 'ua_spoof';
+                $out['bonus'] += 20;
+            }
+
+            if ($r['no_session'] >= self::CLAIM_RATIO && $this->signalHealthy('no_session')) {
+                $out['flags'][] = 'no_session';
+                $out['bonus'] += 30;
+            } elseif ($withSession->count() >= self::CLAIM_MIN && $r['no_click'] >= self::CLAIM_RATIO && $this->signalHealthy('no_click')) {
+                $out['flags'][] = 'no_click';
+                $out['bonus'] += 10;
+            }
+
+            if ($r['hosting'] >= self::CLAIM_RATIO) {
+                $out['flags'][] = 'datacenter_ip';
+                $out['bonus'] += 15;
+            }
+        }
+
+        if ($ips->isNotEmpty()) {
+            try {
+                $out['farm'] = Claim::query()
+                    ->whereIn('ip', $ips->take(50)->all())
+                    ->where('created_at', '>=', now()->subDays(7))
+                    ->whereIn('outcome', Claim::REWARDED)
+                    ->whereNotNull('user_id')
+                    ->where('user_id', '!=', $userId)
+                    ->distinct()
+                    ->count('user_id');
+            } catch (Throwable) {
+                $out['farm'] = 0;
+            }
+
+            if ($out['farm'] + 1 >= $this->settings->ipFarmUsers()) {
+                $out['flags'][] = 'ip_farm';
+                $out['bonus'] += 20;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return array<string, float|int>
+     */
+    public function globalRatios(): array
+    {
+        try {
+            return Cache::remember('voteguard.claims.global', now()->addHour(), function () {
+                $rows = Claim::query()
+                    ->where('created_at', '>=', now()->subDay())
+                    ->whereIn('outcome', Claim::REWARDED)
+                    ->latest('id')
+                    ->limit(5000)
+                    ->pluck('flags');
+
+                $n = $rows->count();
+                $out = ['n' => $n];
+
+                foreach (['no_session', 'no_click', 'no_sec_fetch', 'ua_spoof'] as $flag) {
+                    $hits = $rows->filter(fn ($flags) => in_array($flag, is_array($flags) ? $flags : [], true))->count();
+                    $out[$flag] = $n > 0 ? round($hits / $n, 2) : 0.0;
+                }
+
+                return $out;
+            });
+        } catch (Throwable) {
+            return ['n' => 0];
+        }
+    }
+
+    public function classifyGap(int $gap, int $expected): string
+    {
+        return $this->gapKind($gap, $expected);
+    }
+
+    public function siteDelay(?object $site): int
+    {
+        return $this->cooldowns->for($site);
+    }
+
+    /**
+     * @param  list<int>  $stamps
      * @return array{suspicions: list<int>, snipers: int, tight: int, nears: int, classic: int, sleeps: int, total: int, offsets: list<int>}
      */
-    private function classifyTimestamps($timestamps, int $expected): array
+    private function classifyStamps(array $stamps, int $expected): array
     {
         $out = [
             'suspicions' => [],
@@ -460,12 +639,8 @@ class Detector
             'offsets' => [],
         ];
 
-        if ($timestamps->count() < 2) {
-            return $out;
-        }
-
-        for ($i = 1, $len = $timestamps->count(); $i < $len; $i++) {
-            $gap = (int) Carbon::parse($timestamps[$i])->diffInSeconds(Carbon::parse($timestamps[$i - 1]), true);
+        for ($i = 1, $len = count($stamps); $i < $len; $i++) {
+            $gap = abs($stamps[$i] - $stamps[$i - 1]);
             $out['total']++;
             $kind = $this->gapKind($gap, $expected);
 
@@ -479,46 +654,19 @@ class Detector
                 continue;
             }
 
-            if ($kind === 'sniper') {
-                $out['suspicions'][] = self::SNIPER_POINTS;
-                $out['snipers']++;
-                $out['offsets'][] = $gap - $expected;
+            [$points, $bucket] = match ($kind) {
+                'sniper' => [self::SNIPER_POINTS, 'snipers'],
+                'tight' => [self::TIGHT_POINTS, 'tight'],
+                'near' => [self::NEAR_POINTS, 'nears'],
+                default => [0, 'classic'],
+            };
 
-                continue;
-            }
-
-            if ($kind === 'tight') {
-                $out['suspicions'][] = self::TIGHT_POINTS;
-                $out['tight']++;
-                $out['offsets'][] = $gap - $expected;
-
-                continue;
-            }
-
-            if ($kind === 'near') {
-                $out['suspicions'][] = self::NEAR_POINTS;
-                $out['nears']++;
-                $out['offsets'][] = $gap - $expected;
-
-                continue;
-            }
-
-            $out['suspicions'][] = 0;
-            $out['classic']++;
+            $out['suspicions'][] = $points;
+            $out[$bucket]++;
             $out['offsets'][] = $gap - $expected;
         }
 
         return $out;
-    }
-
-    public function classifyGap(int $gap, int $expected): string
-    {
-        return $this->gapKind($gap, $expected);
-    }
-
-    public function siteDelay(?object $site): int
-    {
-        return $this->expectedDelay($site);
     }
 
     private function gapKind(int $gap, int $expected): string
@@ -612,35 +760,65 @@ class Detector
     /**
      * @return list<string>
      */
-    private function ipFarmFlags(int $userId): array
+    private function liveFlags(): array
     {
-        if (! $this->context->fromVoteDone || $this->context->ip === null) {
+        if (! $this->context->fromVoteDone) {
             return [];
         }
 
-        $users = Detection::query()
-            ->where('ip', $this->context->ip)
-            ->where('created_at', '>=', now()->subDay())
-            ->pluck('user_id')
-            ->push($userId)
-            ->unique();
+        $flags = [];
 
-        if ($users->count() >= $this->settings->ipFarmUsers()) {
-            return ['ip_farm'];
+        if (BrowserCheck::botUserAgent($this->context->userAgent)) {
+            $flags[] = 'bot_ua';
         }
 
-        return [];
+        if ($this->context->webdriver()) {
+            $flags[] = 'webdriver';
+        }
+
+        return $flags;
+    }
+
+    private function signalHealthy(string $flag): bool
+    {
+        $global = $this->globalRatios();
+
+        if ((int) ($global['n'] ?? 0) < 50) {
+            return true;
+        }
+
+        return (float) ($global[$flag] ?? 0.0) <= self::GLOBAL_BREAKER;
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, int>
+     */
+    private function trapUserIds()
+    {
+        try {
+            return Claim::query()
+                ->where('created_at', '>=', now()->subDays(60))
+                ->where('outcome', 'not_found')
+                ->whereNotNull('user_id')
+                ->get(['user_id', 'flags'])
+                ->filter(fn (Claim $claim) => in_array('honeypot', $claim->flags ?? [], true))
+                ->pluck('user_id')
+                ->unique()
+                ->values();
+        } catch (Throwable) {
+            return collect();
+        }
     }
 
     /**
      * @param  list<string>  $flags
      */
-    private function score(array $flags): int
+    private function weight(array $flags): int
     {
         $total = 0;
 
         foreach (array_unique($flags) as $flag) {
-            $total += self::WEIGHTS[$flag] ?? 10;
+            $total += self::LIVE_WEIGHTS[$flag] ?? 0;
         }
 
         return min(100, $total);
@@ -700,6 +878,8 @@ class Detector
     }
 
     /**
+     * Appelé après l'envoi de la réponse au joueur (voir VoteObserver) : l'appel HTTP ne le ralentit pas.
+     *
      * @param  list<string>  $flags
      */
     private function notify(User $user, int $score, array $flags): void
@@ -718,26 +898,22 @@ class Detector
 
         Cache::put($cacheKey, true, now()->addHours(6));
 
-        $payload = [
-            'embeds' => [[
-                'title' => 'VoteGuard — '.$this->statusFromScore($score),
-                'color' => $score >= $this->settings->likelyScore() ? 15158332 : 15105570,
-                'fields' => [
-                    ['name' => 'Joueur', 'value' => $user->name, 'inline' => true],
-                    ['name' => 'Score', 'value' => (string) $score, 'inline' => true],
-                    ['name' => 'Signaux', 'value' => $flags !== [] ? implode(', ', $flags) : '—'],
-                ],
-                'timestamp' => now()->toIso8601String(),
-            ]],
-        ];
-
-        dispatch(function () use ($webhook, $payload) {
-            try {
-                Http::timeout(3)->post($webhook, $payload);
-            } catch (Throwable) {
-                //
-            }
-        })->afterResponse();
+        try {
+            Http::timeout(3)->post($webhook, [
+                'embeds' => [[
+                    'title' => 'VoteGuard — '.$this->statusFromScore($score),
+                    'color' => $score >= $this->settings->likelyScore() ? 15158332 : 15105570,
+                    'fields' => [
+                        ['name' => 'Joueur', 'value' => $user->name, 'inline' => true],
+                        ['name' => 'Score', 'value' => (string) $score, 'inline' => true],
+                        ['name' => 'Signaux', 'value' => $flags !== [] ? implode(', ', $flags) : '—'],
+                    ],
+                    'timestamp' => now()->toIso8601String(),
+                ]],
+            ]);
+        } catch (Throwable) {
+            //
+        }
     }
 
     /**
@@ -749,17 +925,6 @@ class Detector
         $to ??= now();
 
         return [$from->copy()->startOfDay(), $to->copy()->endOfDay()];
-    }
-
-    private function expectedDelay(?object $site): int
-    {
-        $minutes = (int) ($site?->vote_delay ?? 90);
-
-        if ($site !== null && filled($site->vote_reset_at) && $minutes <= 0) {
-            return 86400;
-        }
-
-        return max(60, $minutes * 60);
     }
 
     private function formatDuration(int $seconds): string
