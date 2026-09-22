@@ -10,6 +10,7 @@
         $rowClass = fn (string $kind) => match ($kind) {
             'sniper' => 'table-danger',
             'tight' => 'table-warning',
+            'near' => 'table-info',
             default => '',
         };
     @endphp
@@ -40,6 +41,7 @@
                 <div class="px-3 pt-3 pb-0 small d-flex flex-wrap gap-2">
                     <span><span class="badge text-bg-danger">{{ trans('voteguard::admin.kind.sniper') }}</span> {{ trans('voteguard::admin.legend.sniper') }}</span>
                     <span><span class="badge text-bg-warning text-dark">{{ trans('voteguard::admin.kind.tight') }}</span> {{ trans('voteguard::admin.legend.tight') }}</span>
+                    <span><span class="badge text-bg-info">{{ trans('voteguard::admin.kind.near') }}</span> {{ trans('voteguard::admin.legend.near') }}</span>
                     <span><span class="badge text-bg-success">{{ trans('voteguard::admin.kind.classic') }}</span> {{ trans('voteguard::admin.legend.classic') }}</span>
                     <span><span class="badge text-bg-secondary">{{ trans('voteguard::admin.kind.sleep') }}</span> {{ trans('voteguard::admin.legend.sleep') }}</span>
                 </div>

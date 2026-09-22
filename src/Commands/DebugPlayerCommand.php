@@ -47,7 +47,7 @@ class DebugPlayerCommand extends Command
         $mix = $detector->patternAnalysis($user->id);
 
         $this->info('score='.$score);
-        $this->info('mix snipers='.$mix['snipers'].' tight='.$mix['tight'].' classic='.$mix['classic'].' sleep='.$mix['sleeps'].' awake='.$mix['awake']);
+        $this->info('mix snipers='.$mix['snipers'].' tight='.$mix['tight'].' near='.($mix['nears'] ?? 0).' classic='.$mix['classic'].' sleep='.$mix['sleeps'].' awake='.$mix['awake']);
         $this->info('flags='.json_encode($suspect->last_flags ?? []));
         $this->info('status='.($suspect->status ?? 'none'));
 

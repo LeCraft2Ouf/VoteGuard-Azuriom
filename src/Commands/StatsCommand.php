@@ -42,7 +42,7 @@ class StatsCommand extends Command
             $site->vote_delay,
         ])->all());
 
-        $kinds = ['early' => 0, 'sniper' => 0, 'tight' => 0, 'classic' => 0, 'sleep' => 0];
+        $kinds = ['early' => 0, 'sniper' => 0, 'tight' => 0, 'near' => 0, 'classic' => 0, 'sleep' => 0];
         $deltas = [
             '<0' => 0,
             '0-30s' => 0,
@@ -80,6 +80,7 @@ class StatsCommand extends Command
                 $row = $users[$userId] ?? [
                     'snipers' => 0,
                     'tight' => 0,
+                    'nears' => 0,
                     'classic' => 0,
                     'sleeps' => 0,
                     'early' => 0,
@@ -87,6 +88,7 @@ class StatsCommand extends Command
                     'sum' => 0,
                     'awake' => 0,
                     'votes' => 0,
+                    'offsets' => [],
                 ];
                 $row['votes']++;
                 $row['total']++;
@@ -95,13 +97,21 @@ class StatsCommand extends Command
                     $row['snipers']++;
                     $row['sum'] += 100;
                     $row['awake']++;
+                    $row['offsets'][] = $gap - $expected;
                 } elseif ($kind === 'tight') {
                     $row['tight']++;
                     $row['sum'] += 40;
                     $row['awake']++;
+                    $row['offsets'][] = $gap - $expected;
+                } elseif ($kind === 'near') {
+                    $row['nears']++;
+                    $row['sum'] += 25;
+                    $row['awake']++;
+                    $row['offsets'][] = $gap - $expected;
                 } elseif ($kind === 'classic') {
                     $row['classic']++;
                     $row['awake']++;
+                    $row['offsets'][] = $gap - $expected;
                 } elseif ($kind === 'sleep') {
                     $row['sleeps']++;
                 } else {
@@ -113,6 +123,7 @@ class StatsCommand extends Command
                 $users[$userId] = $users[$userId] ?? [
                     'snipers' => 0,
                     'tight' => 0,
+                    'nears' => 0,
                     'classic' => 0,
                     'sleeps' => 0,
                     'early' => 0,
@@ -120,6 +131,7 @@ class StatsCommand extends Command
                     'sum' => 0,
                     'awake' => 0,
                     'votes' => 0,
+                    'offsets' => [],
                 ];
                 $users[$userId]['votes']++;
             }
@@ -173,6 +185,7 @@ class StatsCommand extends Command
                 'score' => $score,
                 'snipers' => $row['snipers'],
                 'tight' => $row['tight'],
+                'nears' => $row['nears'] ?? 0,
                 'classic' => $row['classic'],
                 'sleeps' => $row['sleeps'],
                 'awake' => $row['awake'],
@@ -199,7 +212,7 @@ class StatsCommand extends Command
 
         $this->info('top 25');
         $this->table(
-            ['name', 'id', 'score', 'votes', 'sniper', 'tight', 'classic', 'sleep', 'flags', 'bdd_score', 'bdd_status'],
+            ['name', 'id', 'score', 'votes', 'sniper', 'tight', 'near', 'classic', 'sleep', 'flags', 'bdd_score', 'bdd_status'],
             array_map(function (array $row) use ($names, $stored) {
                 $suspect = $stored->get($row['id']);
 
@@ -210,6 +223,7 @@ class StatsCommand extends Command
                     $row['votes'],
                     $row['snipers'],
                     $row['tight'],
+                    $row['nears'] ?? 0,
                     $row['classic'],
                     $row['sleeps'],
                     $row['flags'] ?: '—',

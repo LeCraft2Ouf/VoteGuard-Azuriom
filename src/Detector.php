@@ -38,6 +38,10 @@ class Detector
 
     private const TIGHT_POINTS = 40;
 
+    private const NEAR_POINTS = 25;
+
+    private const NEAR_SECONDS = 1500;
+
     private const CONFIDENCE_AWAKE = 24;
 
     private const MIN_FLAG_AWAKE = 12;
@@ -290,9 +294,9 @@ class Detector
 
     /**
      * Score = moyenne des votes éveillés, pondérée par le volume.
-     * Sniper = 100, limite (+3–8 min) = 40, classique = 0.
+     * Sniper = 100, limite (+3–8 min) = 40, aléa (+8–25 min) = 25, classique = 0.
      *
-     * @return array{score: int, flags: list<string>, snipers: int, tight: int, classic: int, sleeps: int, awake: int, total: int}
+     * @return array{score: int, flags: list<string>, snipers: int, tight: int, nears: int, classic: int, sleeps: int, awake: int, total: int}
      */
     public function patternAnalysis(int $userId, ?Carbon $from = null, ?Carbon $to = null): array
     {
@@ -301,10 +305,12 @@ class Detector
             'flags' => [],
             'snipers' => 0,
             'tight' => 0,
+            'nears' => 0,
             'classic' => 0,
             'sleeps' => 0,
             'awake' => 0,
             'total' => 0,
+            'offsets' => [],
         ];
 
         if (! class_exists(Vote::class)) {
@@ -337,9 +343,11 @@ class Detector
             $suspicions = array_merge($suspicions, $part['suspicions']);
             $merged['snipers'] += $part['snipers'];
             $merged['tight'] += $part['tight'];
+            $merged['nears'] += $part['nears'];
             $merged['classic'] += $part['classic'];
             $merged['sleeps'] += $part['sleeps'];
             $merged['total'] += $part['total'];
+            $merged['offsets'] = array_merge($merged['offsets'], $part['offsets']);
         }
 
         $awake = count($suspicions);
@@ -347,12 +355,13 @@ class Detector
         $scored = $this->scoreMix($merged + ['sum' => array_sum($suspicions)]);
         $merged['score'] = $scored['score'];
         $merged['flags'] = $scored['flags'];
+        unset($merged['offsets']);
 
         return $merged;
     }
 
     /**
-     * @param  array{snipers: int, tight: int, classic?: int, sleeps: int, total: int, awake: int, sum?: int}  $mix
+     * @param  array{snipers: int, tight: int, nears?: int, classic?: int, sleeps: int, total: int, awake: int, sum?: int, offsets?: list<int>}  $mix
      * @return array{score: int, flags: list<string>}
      */
     public function scoreMix(array $mix): array
@@ -366,13 +375,19 @@ class Detector
 
         $snipers = (int) ($mix['snipers'] ?? 0);
         $tight = (int) ($mix['tight'] ?? 0);
+        $nears = (int) ($mix['nears'] ?? 0);
         $sleeps = (int) ($mix['sleeps'] ?? 0);
         $total = max(1, (int) ($mix['total'] ?? 0));
-        $sum = (int) ($mix['sum'] ?? ($snipers * self::SNIPER_POINTS + $tight * self::TIGHT_POINTS));
+        $sum = (int) ($mix['sum'] ?? (
+            $snipers * self::SNIPER_POINTS
+            + $tight * self::TIGHT_POINTS
+            + $nears * self::NEAR_POINTS
+        ));
         $avg = $sum / $awake;
         $score = (int) round($avg * min(1.0, $awake / self::CONFIDENCE_AWAKE));
         $sniperRatio = $snipers / $awake;
         $botRatio = ($snipers + $tight) / $awake;
+        $scheduledRatio = ($snipers + $tight + $nears) / $awake;
         $sleepRatio = $sleeps / $total;
         $flags = [];
 
@@ -384,17 +399,29 @@ class Detector
             $flags[] = 'regular_interval';
         }
 
+        if ($this->isJitterClock($mix['offsets'] ?? [], $min)) {
+            if (! in_array('regular_interval', $flags, true)) {
+                $flags[] = 'regular_interval';
+            }
+            $score = max($score, 48);
+        }
+
+        if ($awake >= self::MIN_FLAG_AWAKE && $scheduledRatio >= 0.60) {
+            $flags[] = 'scheduled_vote';
+            $score = max($score, $scheduledRatio >= 0.75 && $awake >= 16 ? 55 : 35);
+        }
+
         if ($total >= 20 && $sleepRatio <= 0.15 && $sniperRatio >= 0.40) {
             $flags[] = 'always_on';
             $score = min(100, $score + 10);
         }
 
-        return ['score' => $score, 'flags' => $flags];
+        return ['score' => min(100, $score), 'flags' => $flags];
     }
 
     /**
      * @param  \Illuminate\Support\Collection<int, mixed>  $timestamps
-     * @return array{suspicions: list<int>, snipers: int, tight: int, classic: int, sleeps: int, total: int}
+     * @return array{suspicions: list<int>, snipers: int, tight: int, nears: int, classic: int, sleeps: int, total: int, offsets: list<int>}
      */
     private function classifyTimestamps($timestamps, int $expected): array
     {
@@ -402,9 +429,11 @@ class Detector
             'suspicions' => [],
             'snipers' => 0,
             'tight' => 0,
+            'nears' => 0,
             'classic' => 0,
             'sleeps' => 0,
             'total' => 0,
+            'offsets' => [],
         ];
 
         if ($timestamps->count() < 2) {
@@ -429,6 +458,7 @@ class Detector
             if ($kind === 'sniper') {
                 $out['suspicions'][] = self::SNIPER_POINTS;
                 $out['snipers']++;
+                $out['offsets'][] = $gap - $expected;
 
                 continue;
             }
@@ -436,12 +466,22 @@ class Detector
             if ($kind === 'tight') {
                 $out['suspicions'][] = self::TIGHT_POINTS;
                 $out['tight']++;
+                $out['offsets'][] = $gap - $expected;
+
+                continue;
+            }
+
+            if ($kind === 'near') {
+                $out['suspicions'][] = self::NEAR_POINTS;
+                $out['nears']++;
+                $out['offsets'][] = $gap - $expected;
 
                 continue;
             }
 
             $out['suspicions'][] = 0;
             $out['classic']++;
+            $out['offsets'][] = $gap - $expected;
         }
 
         return $out;
@@ -471,11 +511,78 @@ class Detector
             return 'tight';
         }
 
+        if ($gap <= $expected + self::NEAR_SECONDS) {
+            return 'near';
+        }
+
         if ($gap >= max((int) ($expected * 2.5), 6 * 3600)) {
             return 'sleep';
         }
 
         return 'classic';
+    }
+
+    /**
+     * Horloge + jitter (bots type Voxa : cooldown + délai aléatoire borné).
+     *
+     * @param  list<int>  $offsets
+     */
+    private function isJitterClock(array $offsets, int $min): bool
+    {
+        if (count($offsets) < $min) {
+            return false;
+        }
+
+        $stddev = $this->stddev($offsets);
+        $median = $this->median($offsets);
+
+        return $stddev !== null
+            && $stddev <= $this->settings->maxStddev()
+            && $median !== null
+            && $median >= 0
+            && $median <= self::NEAR_SECONDS;
+    }
+
+    /**
+     * @param  list<int>  $values
+     */
+    private function stddev(array $values): ?float
+    {
+        $n = count($values);
+
+        if ($n < 2) {
+            return null;
+        }
+
+        $mean = array_sum($values) / $n;
+        $var = 0.0;
+
+        foreach ($values as $value) {
+            $var += ($value - $mean) ** 2;
+        }
+
+        return sqrt($var / $n);
+    }
+
+    /**
+     * @param  list<int>  $values
+     */
+    private function median(array $values): ?float
+    {
+        $n = count($values);
+
+        if ($n === 0) {
+            return null;
+        }
+
+        sort($values);
+        $mid = intdiv($n, 2);
+
+        if ($n % 2 === 1) {
+            return (float) $values[$mid];
+        }
+
+        return ($values[$mid - 1] + $values[$mid]) / 2;
     }
 
     /**

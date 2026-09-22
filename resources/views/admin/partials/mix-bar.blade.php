@@ -2,6 +2,7 @@
     $parts = [
         'sniper' => (int) ($mix['snipers'] ?? 0),
         'tight' => (int) ($mix['tight'] ?? 0),
+        'near' => (int) ($mix['nears'] ?? 0),
         'classic' => (int) ($mix['classic'] ?? 0),
         'sleep' => (int) ($mix['sleeps'] ?? 0),
     ];
@@ -9,6 +10,7 @@
     $colors = [
         'sniper' => 'bg-danger',
         'tight' => 'bg-warning',
+        'near' => 'bg-info',
         'classic' => 'bg-success',
         'sleep' => 'bg-secondary',
     ];
@@ -24,6 +26,7 @@
 <div class="d-flex flex-wrap gap-2 small text-muted">
     <span><span class="badge text-bg-danger vg-kind">{{ trans('voteguard::admin.kind.sniper') }}</span> {{ $parts['sniper'] }}</span>
     <span><span class="badge text-bg-warning text-dark vg-kind">{{ trans('voteguard::admin.kind.tight') }}</span> {{ $parts['tight'] }}</span>
+    <span><span class="badge text-bg-info vg-kind">{{ trans('voteguard::admin.kind.near') }}</span> {{ $parts['near'] }}</span>
     <span><span class="badge text-bg-success vg-kind">{{ trans('voteguard::admin.kind.classic') }}</span> {{ $parts['classic'] }}</span>
     <span><span class="badge text-bg-secondary vg-kind">{{ trans('voteguard::admin.kind.sleep') }}</span> {{ $parts['sleep'] }}</span>
 </div>
