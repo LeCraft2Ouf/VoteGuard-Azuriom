@@ -84,6 +84,7 @@ return [
         'regular_interval' => 'Clock-like vote interval',
         'cooldown_sniper' => 'Voted immediately when cooldown ended',
         'scheduled_vote' => 'Always just after cooldown (bot-style delay)',
+        'night_vote' => 'Many votes between midnight and 6am (24/7 bot)',
         'always_on' => '24/7 voting without a break',
         'ip_farm' => 'Several accounts on the same IP',
     ],

@@ -84,6 +84,7 @@ return [
         'regular_interval' => 'Intervalle trop régulier (horloge)',
         'cooldown_sniper' => 'Vote pile à la fin du cooldown',
         'scheduled_vote' => 'Toujours juste après le cooldown (délai type bot)',
+        'night_vote' => 'Beaucoup de votes entre minuit et 6h (bot 24h/24)',
         'always_on' => 'Votes 24h/24 sans pause',
         'ip_farm' => 'Plusieurs comptes sur la même IP',
     ],

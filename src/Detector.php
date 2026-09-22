@@ -327,6 +327,8 @@ class Detector
 
         $merged = $zero;
         $suspicions = [];
+        $nightVotes = 0;
+        $rawVotes = 0;
 
         foreach ($siteIds as $siteId) {
             $votes = Vote::query()
@@ -336,6 +338,15 @@ class Detector
                 ->orderBy('created_at')
                 ->pluck('created_at')
                 ->values();
+
+            foreach ($votes as $at) {
+                $rawVotes++;
+                $hour = Carbon::parse($at)->timezone(config('app.timezone', 'Europe/Paris'))->hour;
+
+                if ($hour < 6) {
+                    $nightVotes++;
+                }
+            }
 
             $site = class_exists(Site::class) ? Site::find($siteId) : null;
             $part = $this->classifyTimestamps($votes, $this->expectedDelay($site));
@@ -352,7 +363,11 @@ class Detector
 
         $awake = count($suspicions);
         $merged['awake'] = $awake;
-        $scored = $this->scoreMix($merged + ['sum' => array_sum($suspicions)]);
+        $scored = $this->scoreMix($merged + [
+            'sum' => array_sum($suspicions),
+            'night_votes' => $nightVotes,
+            'raw_votes' => $rawVotes,
+        ]);
         $merged['score'] = $scored['score'];
         $merged['flags'] = $scored['flags'];
         unset($merged['offsets']);
@@ -361,7 +376,7 @@ class Detector
     }
 
     /**
-     * @param  array{snipers: int, tight: int, nears?: int, classic?: int, sleeps: int, total: int, awake: int, sum?: int, offsets?: list<int>}  $mix
+     * @param  array{snipers: int, tight: int, nears?: int, classic?: int, sleeps: int, total: int, awake: int, sum?: int, offsets?: list<int>, night_votes?: int, raw_votes?: int}  $mix
      * @return array{score: int, flags: list<string>}
      */
     public function scoreMix(array $mix): array
@@ -411,7 +426,16 @@ class Detector
             $score = max($score, $scheduledRatio >= 0.75 && $awake >= 16 ? 55 : 35);
         }
 
-        if ($total >= 20 && $sleepRatio <= 0.15 && $sniperRatio >= 0.40) {
+        $rawVotes = (int) ($mix['raw_votes'] ?? 0);
+        $nightVotes = (int) ($mix['night_votes'] ?? 0);
+        $nightRatio = $rawVotes > 0 ? $nightVotes / $rawVotes : 0;
+
+        if ($rawVotes >= 24 && $nightVotes >= 8 && $nightRatio >= 0.16) {
+            $flags[] = 'night_vote';
+            $score = max($score, 42);
+        }
+
+        if ($total >= 20 && $sleepRatio <= 0.15 && $scheduledRatio >= 0.50) {
             $flags[] = 'always_on';
             $score = min(100, $score + 10);
         }
