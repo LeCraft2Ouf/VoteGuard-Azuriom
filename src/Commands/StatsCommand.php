@@ -185,9 +185,9 @@ class StatsCommand extends Command
 
         foreach ($users as $userId => $row) {
             $scored = $detector->scoreMix($row);
-            $score = $scored['score'];
             $flags = $scored['flags'];
             $fill = $row['fill'] ?? null;
+            $score = $detector->capLowFill($scored['score'], $fill, $flags);
 
             if ($fill === null) {
                 $fillBands['n/a']++;

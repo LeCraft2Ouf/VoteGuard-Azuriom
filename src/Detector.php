@@ -144,13 +144,30 @@ class Detector
     {
         $pattern = $this->patternAnalysis($userId, $from, $to);
         $claims = $this->claimAnalysis($userId);
+        $flags = array_values(array_unique(array_merge($pattern['flags'], $claims['flags'])));
+        $score = min(100, max($pattern['score'], $claims['floor']) + $claims['bonus']);
 
         return [
-            'score' => min(100, max($pattern['score'], $claims['floor']) + $claims['bonus']),
-            'flags' => array_values(array_unique(array_merge($pattern['flags'], $claims['flags']))),
+            'score' => $this->capLowFill($score, $pattern['fill'] ?? null, $flags),
+            'flags' => $flags,
             'pattern' => $pattern,
             'claims' => $claims,
         ];
+    }
+
+    /**
+     * Voter pile au cooldown sans volume peut être un joueur qui guette le compte à rebours :
+     * revue manuelle, sauf preuve technique de script.
+     *
+     * @param  list<string>  $flags
+     */
+    public function capLowFill(int $score, ?int $fill, array $flags): int
+    {
+        if ($fill === null || $fill >= 40 || array_intersect(['not_browser', 'honeypot'], $flags) !== []) {
+            return $score;
+        }
+
+        return min($score, max($this->settings->suspectScore(), $this->settings->likelyScore() - 5));
     }
 
     /**

@@ -2,7 +2,7 @@
     "id": "voteguard",
     "name": "VoteGuard",
     "description": "Détecte les votes automatisés (bots auto-vote) à partir du plugin Vote.",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "url": "https://github.com/LeCraft2Ouf/VoteGuard-Azuriom",
     "authors": [
         "LeCraft2Ouf"
