@@ -9,6 +9,7 @@ use Azuriom\Plugin\Vote\Models\Reward;
 use Azuriom\Plugin\Vote\Models\Vote;
 use Azuriom\Plugin\VoteGuard\Blocklist;
 use Azuriom\Plugin\VoteGuard\ClaimRecorder;
+use Azuriom\Plugin\VoteGuard\Commands\ClaimsCommand;
 use Azuriom\Plugin\VoteGuard\Commands\DebugPlayerCommand;
 use Azuriom\Plugin\VoteGuard\Commands\ScanVotesCommand;
 use Azuriom\Plugin\VoteGuard\Commands\StatsCommand;
@@ -73,6 +74,7 @@ class VoteGuardServiceProvider extends BasePluginServiceProvider
             ScanVotesCommand::class,
             DebugPlayerCommand::class,
             StatsCommand::class,
+            ClaimsCommand::class,
         ]);
 
         Permission::registerPermissions([
