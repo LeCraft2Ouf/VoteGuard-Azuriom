@@ -30,8 +30,9 @@ class DashboardController extends Controller
             ->when($status === 'blocked', fn ($query) => $query->where('blocked', true))
             ->when($status && $status !== 'blocked', fn ($query) => $query->where('status', $status))
             ->when(! filled($search) && ! filled($status), fn ($query) => $query->where('status', '!=', 'clear'))
+            ->orderByDesc('blocked')
+            ->orderByDesc('score')
             ->orderByDesc('updated_at')
-            ->orderByDesc('id')
             ->paginate();
 
         $unlisted = collect();
