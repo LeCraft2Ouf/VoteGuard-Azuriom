@@ -146,6 +146,12 @@
                     </div>
                 </div>
 
+                @if (!empty($recommendBlock))
+                    <div class="alert alert-danger">
+                        <div class="fw-semibold">{{ trans('voteguard::admin.show.recommend_title') }}</div>
+                        <div class="small mb-0">{{ trans('voteguard::admin.show.recommend_body') }}</div>
+                    </div>
+                @endif
                 <div class="card">
                     <div class="card-header">{{ trans('voteguard::admin.show.review') }}</div>
                     <div class="card-body">

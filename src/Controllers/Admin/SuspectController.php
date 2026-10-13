@@ -38,13 +38,17 @@ class SuspectController extends Controller
             $claims = collect();
         }
 
+        $mix = $detector->patternAnalysis($suspect->user_id);
+        $claimStats = $detector->claimAnalysis($suspect->user_id);
+
         return view('voteguard::admin.show', [
             'suspect' => $suspect,
             'detections' => $detections,
             'intervals' => $detector->intervalRows($suspect->user_id, 50),
-            'mix' => $detector->patternAnalysis($suspect->user_id),
+            'mix' => $mix,
             'claims' => $claims,
-            'claimStats' => $detector->claimAnalysis($suspect->user_id),
+            'claimStats' => $claimStats,
+            'recommendBlock' => ! $suspect->blocked && $detector->blockRecommended($mix, $claimStats),
             'siteNames' => class_exists(Site::class) ? Site::query()->pluck('name', 'id') : collect(),
         ]);
     }

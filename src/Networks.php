@@ -54,4 +54,28 @@ final class Networks
     {
         return $asn !== null && in_array($asn, self::HOSTING, true);
     }
+
+    /**
+     * IPv4 tel quel. IPv6 ramenée au préfixe /64 : les adresses temporaires d'un même téléphone changent, la ligne non.
+     */
+    public static function prefix(?string $ip): ?string
+    {
+        if ($ip === null || $ip === '') {
+            return null;
+        }
+
+        $packed = @inet_pton($ip);
+
+        if ($packed === false) {
+            return null;
+        }
+
+        if (strlen($packed) === 4) {
+            return $ip;
+        }
+
+        $network = inet_ntop(substr($packed, 0, 8).str_repeat("\0", 8));
+
+        return $network === false ? null : $network;
+    }
 }

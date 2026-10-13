@@ -146,9 +146,15 @@ class Detector
         $claims = $this->claimAnalysis($userId);
         $flags = array_values(array_unique(array_merge($pattern['flags'], $claims['flags'])));
         $score = min(100, max($pattern['score'], $claims['floor']) + $claims['bonus']);
+        $score = $this->capLowFill($score, $pattern['fill'] ?? null, $flags);
+
+        if ($this->blockRecommended($pattern, $claims)) {
+            $flags[] = 'recommend_block';
+            $score = max($score, $this->settings->likelyScore());
+        }
 
         return [
-            'score' => $this->capLowFill($score, $pattern['fill'] ?? null, $flags),
+            'score' => $score,
             'flags' => $flags,
             'pattern' => $pattern,
             'claims' => $claims,
@@ -163,7 +169,10 @@ class Detector
      */
     public function capLowFill(int $score, ?int $fill, array $flags): int
     {
-        if ($fill === null || $fill >= 40 || array_intersect(['not_browser', 'honeypot'], $flags) !== []) {
+        $technical = array_intersect(['not_browser', 'honeypot', 'synced_account'], $flags) !== []
+            || (in_array('ua_spoof', $flags, true) && in_array('no_session', $flags, true));
+
+        if ($fill === null || $fill >= 40 || $technical) {
             return $score;
         }
 
@@ -311,6 +320,8 @@ class Detector
             'total' => 0,
             'fill' => null,
             'fill_site' => null,
+            'recent_fill' => null,
+            'deep_night' => 0,
             'offsets' => [],
         ];
 
@@ -330,8 +341,10 @@ class Detector
         $merged = $zero;
         $suspicions = [];
         $nightVotes = 0;
+        $deepNight = 0;
         $rawVotes = 0;
         $bestFill = null;
+        $bestRecent = null;
 
         foreach ($siteIds as $siteId) {
             $stamps = [];
@@ -347,9 +360,14 @@ class Detector
                 $date = Carbon::parse($at);
                 $stamps[] = $date->getTimestamp();
                 $rawVotes++;
+                $hour = $date->copy()->timezone($timezone)->hour;
 
-                if ($date->copy()->timezone($timezone)->hour < 6) {
+                if ($hour < 6) {
                     $nightVotes++;
+
+                    if ($hour >= 3) {
+                        $deepNight++;
+                    }
                 }
             }
 
@@ -357,6 +375,11 @@ class Detector
             $expected = $this->cooldowns->for($site);
             $part = $this->classifyStamps($stamps, $expected);
             $fill = $this->fillRate($stamps, $expected);
+            $recent = $this->recentFillRate($stamps, $expected);
+
+            if ($recent !== null && ($bestRecent === null || $recent > $bestRecent)) {
+                $bestRecent = $recent;
+            }
 
             if ($fill !== null && ($bestFill === null || $fill > $bestFill)) {
                 $bestFill = $fill;
@@ -375,6 +398,8 @@ class Detector
 
         $merged['awake'] = count($suspicions);
         $merged['fill'] = $bestFill !== null ? (int) round($bestFill * 100) : null;
+        $merged['recent_fill'] = $bestRecent !== null ? (int) round($bestRecent * 100) : null;
+        $merged['deep_night'] = $deepNight;
 
         $scored = $this->scoreMix($merged + [
             'sum' => array_sum($suspicions),
@@ -417,7 +442,9 @@ class Detector
             $botRatio = ($snipers + $tight) / $awake;
             $scheduledRatio = ($snipers + $tight + $nears) / $awake;
             $sleepRatio = $sleeps / $total;
-            $busy = $fill !== null && $fill >= 50;
+            $recent = isset($mix['recent_fill']) ? (int) $mix['recent_fill'] : null;
+            $deepNight = (int) ($mix['deep_night'] ?? 0);
+            $busy = ($fill !== null && $fill >= 50) || ($recent !== null && $recent >= 85);
 
             if ($awake >= self::MIN_FLAG_AWAKE && $snipers >= $min && $sniperRatio >= 0.40) {
                 $flags[] = 'cooldown_sniper';
@@ -445,7 +472,7 @@ class Detector
                 $score = min(100, $score + 5);
             }
 
-            if ($total >= 20 && $sleepRatio <= 0.15 && ($sniperRatio >= 0.40 || ($busy && $scheduledRatio >= 0.50))) {
+            if ($total >= 20 && $sleepRatio <= 0.15 && $deepNight >= 4 && ($sniperRatio >= 0.40 || ($busy && $scheduledRatio >= 0.50))) {
                 $flags[] = 'always_on';
                 $score = min(100, $score + 10);
             }
@@ -502,6 +529,84 @@ class Detector
     }
 
     /**
+     * Cadence sur les 36 dernières heures d'activité. Un bot qui vient de démarrer
+     * a un remplissage 14 jours bas, mais sature déjà les créneaux récents.
+     *
+     * @param  list<int>  $stamps
+     */
+    public function recentFillRate(array $stamps, int $expected): ?float
+    {
+        if (count($stamps) < 16 || $expected <= 0 || $expected > self::FILL_MAX_COOLDOWN) {
+            return null;
+        }
+
+        sort($stamps);
+        $end = $stamps[count($stamps) - 1];
+        $recent = [];
+
+        foreach ($stamps as $stamp) {
+            if ($stamp >= $end - 36 * 3600) {
+                $recent[] = $stamp;
+            }
+        }
+
+        if (count($recent) < 16) {
+            return null;
+        }
+
+        $span = $recent[count($recent) - 1] - $recent[0];
+
+        if ($span < 20 * 3600) {
+            return null;
+        }
+
+        return min(1.0, count($recent) / (intdiv($span, $expected) + 1));
+    }
+
+    /**
+     * Quasi certain : script sans page, horloge pile cooldown, remplissage max avec votes à 3h-6h,
+     * ou second compte qui vote dans la même minute sur la même ligne.
+     *
+     * @param  array<string, mixed>  $pattern
+     * @param  array<string, mixed>  $claims
+     */
+    public function blockRecommended(array $pattern, array $claims): bool
+    {
+        if ((int) ($claims['honeypot'] ?? 0) > 0) {
+            return true;
+        }
+
+        $ratios = $claims['ratios'] ?? [];
+        $n = (int) ($claims['n'] ?? 0);
+
+        if ($n >= 10 && (float) ($ratios['no_session'] ?? 0) >= 0.85 && (float) ($ratios['ua_spoof'] ?? 0) >= 0.85) {
+            return true;
+        }
+
+        if ($n >= 10 && (float) ($ratios['not_browser'] ?? 0) >= 0.85) {
+            return true;
+        }
+
+        $awake = (int) ($pattern['awake'] ?? 0);
+        $snipers = (int) ($pattern['snipers'] ?? 0);
+        $tight = (int) ($pattern['tight'] ?? 0);
+        $fill = isset($pattern['fill']) ? (int) $pattern['fill'] : null;
+        $deep = (int) ($pattern['deep_night'] ?? 0);
+
+        if ($awake >= 60 && $snipers >= 40 && $snipers / $awake >= 0.55) {
+            return true;
+        }
+
+        if ($fill !== null && $fill >= 88 && $awake >= 16 && $deep >= 4 && ($snipers + $tight) / max(1, $awake) >= 0.45) {
+            return true;
+        }
+
+        return ! empty($claims['synced'])
+            && $awake >= 12
+            && $snipers / max(1, $awake) >= 0.35;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function claimAnalysis(int $userId): array
@@ -515,6 +620,7 @@ class Detector
             'ips' => 0,
             'farm' => 0,
             'honeypot' => 0,
+            'synced' => false,
         ];
 
         try {
@@ -575,25 +681,25 @@ class Detector
                 $out['flags'][] = 'datacenter_ip';
                 $out['bonus'] += 15;
             }
+
+            if ($n >= 10 && $r['ua_spoof'] >= 0.85 && $r['no_session'] >= 0.85) {
+                $out['floor'] = max($out['floor'], 90);
+            }
         }
 
         if ($ips->isNotEmpty()) {
-            try {
-                $out['farm'] = Claim::query()
-                    ->whereIn('ip', $ips->take(50)->all())
-                    ->where('created_at', '>=', now()->subDays(7))
-                    ->whereIn('outcome', Claim::REWARDED)
-                    ->whereNotNull('user_id')
-                    ->where('user_id', '!=', $userId)
-                    ->distinct()
-                    ->count('user_id');
-            } catch (Throwable) {
-                $out['farm'] = 0;
-            }
+            $partners = $this->linePartners($userId, $ips->take(50)->all());
+            $out['farm'] = count($partners);
 
             if ($out['farm'] + 1 >= $this->settings->ipFarmUsers()) {
                 $out['flags'][] = 'ip_farm';
                 $out['bonus'] += 20;
+            }
+
+            if ($this->votesInLockstep($userId, $partners)) {
+                $out['synced'] = true;
+                $out['flags'][] = 'synced_account';
+                $out['bonus'] += 25;
             }
         }
 
@@ -796,6 +902,125 @@ class Detector
         return $flags;
     }
 
+    /**
+     * @param  list<string>  $ips
+     * @return list<int>
+     */
+    private function linePartners(int $userId, array $ips): array
+    {
+        $partners = [];
+
+        foreach ($this->claimNetworks() as $prefix => $users) {
+            $hit = false;
+
+            foreach ($ips as $ip) {
+                if (Networks::prefix($ip) === $prefix) {
+                    $hit = true;
+                    break;
+                }
+            }
+
+            if (! $hit) {
+                continue;
+            }
+
+            foreach (array_keys($users) as $other) {
+                if ((int) $other !== $userId) {
+                    $partners[(int) $other] = true;
+                }
+            }
+        }
+
+        return array_keys($partners);
+    }
+
+    /**
+     * @param  list<int>  $partners
+     */
+    private function votesInLockstep(int $userId, array $partners): bool
+    {
+        if ($partners === [] || count($partners) > 6 || ! class_exists(Vote::class)) {
+            return false;
+        }
+
+        try {
+            $since = now()->subDays(self::CLAIM_DAYS);
+            $mine = Vote::query()
+                ->where('user_id', $userId)
+                ->where('created_at', '>=', $since)
+                ->orderBy('created_at')
+                ->pluck('created_at');
+            $other = Vote::query()
+                ->whereIn('user_id', $partners)
+                ->where('created_at', '>=', $since)
+                ->orderBy('created_at')
+                ->pluck('created_at');
+        } catch (Throwable) {
+            return false;
+        }
+
+        $others = [];
+
+        foreach ($other as $at) {
+            $others[] = Carbon::parse($at)->getTimestamp();
+        }
+
+        $hits = 0;
+        $total = 0;
+        $index = 0;
+        $count = count($others);
+
+        foreach ($mine as $at) {
+            $stamp = Carbon::parse($at)->getTimestamp();
+            $total++;
+
+            while ($index < $count && $stamp - $others[$index] > 90) {
+                $index++;
+            }
+
+            for ($cursor = $index; $cursor < $count && $others[$cursor] - $stamp <= 90; $cursor++) {
+                if (abs($others[$cursor] - $stamp) <= 90) {
+                    $hits++;
+                    break;
+                }
+            }
+        }
+
+        return $total > 0 && $hits >= 15 && $hits / $total >= 0.55;
+    }
+
+    /**
+     * @return array<string, array<int, true>>
+     */
+    private function claimNetworks(): array
+    {
+        try {
+            return Cache::remember('voteguard.claim.networks', now()->addMinutes(10), function () {
+                $map = [];
+                $rows = Claim::query()
+                    ->where('created_at', '>=', now()->subDays(7))
+                    ->whereIn('outcome', Claim::REWARDED)
+                    ->whereNotNull('user_id')
+                    ->whereNotNull('ip')
+                    ->get(['user_id', 'ip']);
+
+                foreach ($rows as $row) {
+                    $prefix = Networks::prefix($row->ip);
+
+                    if ($prefix === null) {
+                        continue;
+                    }
+
+                    $map[$prefix][(int) $row->user_id] = true;
+                }
+
+                return $map;
+            });
+        } catch (Throwable) {
+            return [];
+        }
+    }
+
     private function signalHealthy(string $flag): bool
     {
         $global = $this->globalRatios();
@@ -916,15 +1141,21 @@ class Detector
         Cache::put($cacheKey, true, now()->addHours(6));
 
         try {
+            $fields = [
+                ['name' => 'Joueur', 'value' => $user->name, 'inline' => true],
+                ['name' => 'Score', 'value' => (string) $score, 'inline' => true],
+                ['name' => 'Signaux', 'value' => $flags !== [] ? implode(', ', $flags) : '—'],
+            ];
+
+            if (in_array('recommend_block', $flags, true)) {
+                $fields[] = ['name' => 'Action', 'value' => 'Bloquer les récompenses vote'];
+            }
+
             Http::timeout(3)->post($webhook, [
                 'embeds' => [[
                     'title' => 'VoteGuard — '.$this->statusFromScore($score),
                     'color' => $score >= $this->settings->likelyScore() ? 15158332 : 15105570,
-                    'fields' => [
-                        ['name' => 'Joueur', 'value' => $user->name, 'inline' => true],
-                        ['name' => 'Score', 'value' => (string) $score, 'inline' => true],
-                        ['name' => 'Signaux', 'value' => $flags !== [] ? implode(', ', $flags) : '—'],
-                    ],
+                    'fields' => $fields,
                     'timestamp' => now()->toIso8601String(),
                 ]],
             ]);
