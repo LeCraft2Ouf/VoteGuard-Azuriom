@@ -23,6 +23,8 @@ class DashboardController extends Controller
         $search = $request->input('search');
         $status = $request->input('status');
         [$periodFrom, $periodTo] = $this->listPeriod($request);
+        $defaultFrom = now()->subDays(60)->startOfDay();
+        $defaultTo = now()->endOfDay();
 
         $suspects = $this->votedInPeriod(Suspect::query(), $periodFrom, $periodTo)
             ->with('user')
@@ -52,10 +54,9 @@ class DashboardController extends Controller
         return view('voteguard::admin.index', [
             'search' => $search,
             'status' => $status,
-            'filterFrom' => $periodFrom?->toDateString() ?? '',
-            'filterTo' => $periodTo?->toDateString() ?? '',
-            'scanFrom' => $request->input('from', now()->subDays(60)->toDateString()),
-            'scanTo' => $request->input('to', now()->toDateString()),
+            'filterFrom' => $periodFrom->toDateString(),
+            'filterTo' => $periodTo->toDateString(),
+            'periodIsDefault' => $periodFrom->equalTo($defaultFrom) && $periodTo->isSameDay($defaultTo),
             'suspects' => $suspects,
             'countLikely' => $this->votedInPeriod(Suspect::query(), $periodFrom, $periodTo)->where('status', 'likely')->count(),
             'countSuspect' => $this->votedInPeriod(Suspect::query(), $periodFrom, $periodTo)->where('status', 'suspect')->count(),
@@ -117,19 +118,15 @@ class DashboardController extends Controller
     }
 
     /**
-     * @return array{0: ?Carbon, 1: ?Carbon}
+     * @return array{0: Carbon, 1: Carbon}
      */
     private function listPeriod(Request $request): array
     {
-        if (! $request->filled('from') || ! $request->filled('to')) {
-            return [null, null];
-        }
-
         try {
-            $from = Carbon::parse($request->input('from'))->startOfDay();
-            $to = Carbon::parse($request->input('to'))->endOfDay();
+            $from = Carbon::parse($request->input('from', now()->subDays(60)->toDateString()))->startOfDay();
+            $to = Carbon::parse($request->input('to', now()->toDateString()))->endOfDay();
         } catch (Throwable) {
-            return [null, null];
+            return [now()->subDays(60)->startOfDay(), now()->endOfDay()];
         }
 
         if ($from->greaterThan($to)) {

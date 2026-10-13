@@ -25,7 +25,7 @@
             ['key' => 'blocked', 'count' => $countBlocked, 'border' => 'border-dark'],
         ] as $stat)
             <div class="col-6 col-xl">
-                <a href="{{ route('voteguard.admin.index', array_filter(['status' => $status === $stat['key'] ? null : $stat['key'], 'search' => $search, 'from' => $filterFrom, 'to' => $filterTo])) }}"
+                <a href="{{ route('voteguard.admin.index', array_filter(['status' => $status === $stat['key'] ? null : $stat['key'], 'search' => $search, 'from' => $periodIsDefault ? null : $filterFrom, 'to' => $periodIsDefault ? null : $filterTo])) }}"
                    class="vg-stat {{ $status === $stat['key'] ? 'is-active' : '' }}">
                     <div class="card {{ $stat['border'] }}">
                         <div class="card-body">
@@ -38,95 +38,43 @@
         @endforeach
     </div>
 
-    <div class="row g-3 mb-4">
-        <div class="col-lg-5">
-            <div class="card h-100">
-                <div class="card-header">{{ trans('voteguard::admin.filters') }}</div>
-                <div class="card-body">
-                    <form method="GET" action="{{ route('voteguard.admin.index') }}" class="row g-2 align-items-end">
-                        <div class="col-sm-6">
-                            <label class="form-label" for="search">{{ trans('voteguard::admin.search') }}</label>
-                            <input type="text" class="form-control" id="search" name="search" value="{{ $search }}"
-                                   placeholder="{{ trans('voteguard::admin.search_placeholder') }}" autocomplete="off">
-                        </div>
-                        <div class="col-sm-6">
-                            <label class="form-label" for="status">{{ trans('voteguard::admin.fields.status') }}</label>
-                            <select class="form-select" id="status" name="status">
-                                <option value="">{{ trans('voteguard::admin.all_status') }}</option>
-                                @foreach (['clear', 'watch', 'suspect', 'likely', 'confirmed', 'blocked', 'false_positive'] as $key)
-                                    <option value="{{ $key }}" @selected($status === $key)>
-                                        {{ trans('voteguard::admin.status.'.$key) }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div class="col-sm-6">
-                            <label class="form-label" for="filter-from">{{ trans('voteguard::admin.scan.from') }}</label>
-                            <input type="date" class="form-control" id="filter-from" name="from" value="{{ $filterFrom }}">
-                        </div>
-                        <div class="col-sm-6">
-                            <label class="form-label" for="filter-to">{{ trans('voteguard::admin.scan.to') }}</label>
-                            <input type="date" class="form-control" id="filter-to" name="to" value="{{ $filterTo }}">
-                        </div>
-                        <div class="col-12">
-                            <div class="form-text">{{ trans('voteguard::admin.period_help') }}</div>
-                        </div>
-                        <div class="col-12 d-flex gap-2">
-                            <button type="submit" class="btn btn-primary">{{ trans('messages.actions.search') }}</button>
-                            @if ($search || $status || $filterFrom || $filterTo)
-                                <a href="{{ route('voteguard.admin.index') }}" class="btn btn-outline-secondary">
-                                    {{ trans('voteguard::admin.reset') }}
-                                </a>
-                            @endif
-                        </div>
-                    </form>
-                    <form method="POST" action="{{ route('voteguard.admin.open') }}" class="row g-2 align-items-end mt-3 pt-3 border-top">
-                        @csrf
-                        <div class="col-sm-8">
-                            <label class="form-label" for="open-name">{{ trans('voteguard::admin.open_player') }}</label>
-                            <input type="text" class="form-control" id="open-name" name="name" required
-                                   value="{{ $search }}" placeholder="{{ trans('voteguard::admin.search_placeholder') }}"
-                                   autocomplete="off">
-                        </div>
-                        <div class="col-sm-4">
-                            <button type="submit" class="btn btn-outline-primary w-100">{{ trans('voteguard::admin.open_player_btn') }}</button>
-                        </div>
-                        <div class="col-12">
-                            <div class="form-text">{{ trans('voteguard::admin.open_player_help') }}</div>
-                        </div>
-                    </form>
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" action="{{ route('voteguard.admin.index') }}" class="row g-2 align-items-end">
+                @if ($status)
+                    <input type="hidden" name="status" value="{{ $status }}">
+                @endif
+                <div class="col-md-4">
+                    <label class="form-label" for="search">{{ trans('voteguard::admin.search') }}</label>
+                    <input type="text" class="form-control" id="search" name="search" value="{{ $search }}"
+                           placeholder="{{ trans('voteguard::admin.search_placeholder') }}" autocomplete="off">
                 </div>
-            </div>
-        </div>
-        <div class="col-lg-7">
-            <div class="card h-100">
-                <div class="card-header">{{ trans('voteguard::admin.scan.title') }}</div>
-                <div class="card-body">
-                    <form method="POST" action="{{ route('voteguard.admin.scan') }}" id="voteguard-scan-form"
-                          class="row g-2 align-items-end">
-                        @csrf
-                        <div class="col-sm-4">
-                            <label class="form-label" for="scan-from">{{ trans('voteguard::admin.scan.from') }}</label>
-                            <input type="date" class="form-control" id="scan-from" name="from" required
-                                   value="{{ $scanFrom }}">
-                        </div>
-                        <div class="col-sm-4">
-                            <label class="form-label" for="scan-to">{{ trans('voteguard::admin.scan.to') }}</label>
-                            <input type="date" class="form-control" id="scan-to" name="to" required
-                                   value="{{ $scanTo }}">
-                        </div>
-                        <div class="col-sm-4">
-                            <label class="form-label d-none d-sm-block">&nbsp;</label>
-                            <button type="submit" class="btn btn-warning w-100" id="voteguard-scan-btn">
-                                {{ trans('voteguard::admin.scan.button') }}
-                            </button>
-                        </div>
-                    </form>
+                <div class="col-6 col-md-2">
+                    <label class="form-label" for="filter-from">{{ trans('voteguard::admin.scan.from') }}</label>
+                    <input type="date" class="form-control" id="filter-from" name="from" required value="{{ $filterFrom }}">
                 </div>
-                <div class="card-footer text-muted small">
-                    {{ trans('voteguard::admin.scan.help') }}
+                <div class="col-6 col-md-2">
+                    <label class="form-label" for="filter-to">{{ trans('voteguard::admin.scan.to') }}</label>
+                    <input type="date" class="form-control" id="filter-to" name="to" required value="{{ $filterTo }}">
                 </div>
-            </div>
+                <div class="col-md-4 d-flex flex-wrap gap-2">
+                    <button type="submit" class="btn btn-primary">{{ trans('messages.actions.search') }}</button>
+                    <button type="button" class="btn btn-warning" id="voteguard-scan-btn">
+                        {{ trans('voteguard::admin.scan.button') }}
+                    </button>
+                    @if ($search || $status || ! $periodIsDefault)
+                        <a href="{{ route('voteguard.admin.index') }}" class="btn btn-outline-secondary">
+                            {{ trans('voteguard::admin.reset') }}
+                        </a>
+                    @endif
+                </div>
+                <div class="col-12">
+                    <div class="form-text mb-0">{{ trans('voteguard::admin.period_help') }}</div>
+                </div>
+            </form>
+            <form method="POST" action="{{ route('voteguard.admin.scan') }}" id="voteguard-scan-form" class="d-none">
+                @csrf
+            </form>
         </div>
     </div>
 
@@ -209,7 +157,7 @@
                     @empty
                         <tr>
                             <td colspan="6" class="text-center text-muted py-4">
-                                {{ ($search || $status || $filterFrom || $filterTo) ? trans('voteguard::admin.empty_filter') : trans('voteguard::admin.empty') }}
+                                {{ ($search || $status) ? trans('voteguard::admin.empty_filter') : trans('voteguard::admin.empty_period') }}
                             </td>
                         </tr>
                     @endforelse
@@ -292,8 +240,8 @@
                         },
                         body: JSON.stringify({
                             offset: offset,
-                            from: form.querySelector('[name="from"]').value,
-                            to: form.querySelector('[name="to"]').value
+                            from: document.getElementById('filter-from').value,
+                            to: document.getElementById('filter-to').value
                         })
                     });
 
@@ -311,16 +259,15 @@
                         url.searchParams.set('scan_likely', String(data.likely || 0));
                         url.searchParams.set('scan_suspect', String(data.suspect || 0));
                         url.searchParams.set('scan_watch', String(data.watch || 0));
-                        url.searchParams.set('from', form.querySelector('[name="from"]').value);
-                        url.searchParams.set('to', form.querySelector('[name="to"]').value);
+                        url.searchParams.set('from', document.getElementById('filter-from').value);
+                        url.searchParams.set('to', document.getElementById('filter-to').value);
                         window.location.href = url.toString();
                         return;
                     }
                 }
             }
 
-            form.addEventListener('submit', function (ev) {
-                ev.preventDefault();
+            button.addEventListener('click', function () {
                 button.disabled = true;
                 overlay.classList.remove('d-none');
                 setProgress(0, 0);
