@@ -24,7 +24,7 @@ class DashboardController extends Controller
         $status = $request->input('status');
         $hideBlocked = $request->boolean('hide_blocked') && $status !== 'blocked';
         [$periodFrom, $periodTo] = $this->listPeriod($request);
-        $defaultFrom = now()->subDays(60)->startOfDay();
+        $defaultFrom = now()->startOfMonth()->startOfDay();
         $defaultTo = now()->endOfDay();
 
         $suspects = $this->votedInPeriod(Suspect::query(), $periodFrom, $periodTo)
@@ -78,7 +78,7 @@ class DashboardController extends Controller
             'offset' => ['nullable', 'integer', 'min:0'],
         ]);
 
-        $from = Carbon::parse($validated['from'] ?? now()->subDays(60)->toDateString())->startOfDay();
+        $from = Carbon::parse($validated['from'] ?? now()->startOfMonth()->toDateString())->startOfDay();
         $to = Carbon::parse($validated['to'] ?? now()->toDateString())->endOfDay();
 
         if ($from->greaterThan($to)) {
@@ -126,10 +126,10 @@ class DashboardController extends Controller
     private function listPeriod(Request $request): array
     {
         try {
-            $from = Carbon::parse($request->input('from', now()->subDays(60)->toDateString()))->startOfDay();
+            $from = Carbon::parse($request->input('from', now()->startOfMonth()->toDateString()))->startOfDay();
             $to = Carbon::parse($request->input('to', now()->toDateString()))->endOfDay();
         } catch (Throwable) {
-            return [now()->subDays(60)->startOfDay(), now()->endOfDay()];
+            return [now()->startOfMonth()->startOfDay(), now()->endOfDay()];
         }
 
         if ($from->greaterThan($to)) {
