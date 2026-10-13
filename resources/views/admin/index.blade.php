@@ -25,7 +25,7 @@
             ['key' => 'blocked', 'count' => $countBlocked, 'border' => 'border-dark'],
         ] as $stat)
             <div class="col-6 col-xl">
-                <a href="{{ route('voteguard.admin.index', array_filter(['status' => $status === $stat['key'] ? null : $stat['key'], 'search' => $search, 'from' => $periodIsDefault ? null : $filterFrom, 'to' => $periodIsDefault ? null : $filterTo])) }}"
+                <a href="{{ route('voteguard.admin.index', array_filter(['status' => $status === $stat['key'] ? null : $stat['key'], 'search' => $search, 'from' => $periodIsDefault ? null : $filterFrom, 'to' => $periodIsDefault ? null : $filterTo, 'hide_blocked' => ($hideBlocked && $stat['key'] !== 'blocked') ? 1 : null])) }}"
                    class="vg-stat {{ $status === $stat['key'] ? 'is-active' : '' }}">
                     <div class="card {{ $stat['border'] }}">
                         <div class="card-body">
@@ -43,6 +43,9 @@
             <form method="GET" action="{{ route('voteguard.admin.index') }}" class="row g-2 align-items-end">
                 @if ($status)
                     <input type="hidden" name="status" value="{{ $status }}">
+                @endif
+                @if ($hideBlocked)
+                    <input type="hidden" name="hide_blocked" value="1">
                 @endif
                 <div class="col-md-4">
                     <label class="form-label" for="search">{{ trans('voteguard::admin.search') }}</label>
@@ -62,7 +65,11 @@
                     <button type="button" class="btn btn-warning" id="voteguard-scan-btn">
                         {{ trans('voteguard::admin.scan.button') }}
                     </button>
-                    @if ($search || $status || ! $periodIsDefault)
+                    <a href="{{ route('voteguard.admin.index', array_filter(['status' => $status, 'search' => $search, 'from' => $periodIsDefault ? null : $filterFrom, 'to' => $periodIsDefault ? null : $filterTo, 'hide_blocked' => $hideBlocked ? null : 1])) }}"
+                       class="btn {{ $hideBlocked ? 'btn-dark' : 'btn-outline-secondary' }}">
+                        {{ trans('voteguard::admin.hide_blocked') }}
+                    </a>
+                    @if ($search || $status || $hideBlocked || ! $periodIsDefault)
                         <a href="{{ route('voteguard.admin.index') }}" class="btn btn-outline-secondary">
                             {{ trans('voteguard::admin.reset') }}
                         </a>
@@ -261,6 +268,9 @@
                         url.searchParams.set('scan_watch', String(data.watch || 0));
                         url.searchParams.set('from', document.getElementById('filter-from').value);
                         url.searchParams.set('to', document.getElementById('filter-to').value);
+                        if (document.querySelector('input[name="hide_blocked"]')) {
+                            url.searchParams.set('hide_blocked', '1');
+                        }
                         window.location.href = url.toString();
                         return;
                     }

@@ -22,6 +22,7 @@ class DashboardController extends Controller
     {
         $search = $request->input('search');
         $status = $request->input('status');
+        $hideBlocked = $request->boolean('hide_blocked') && $status !== 'blocked';
         [$periodFrom, $periodTo] = $this->listPeriod($request);
         $defaultFrom = now()->subDays(60)->startOfDay();
         $defaultTo = now()->endOfDay();
@@ -34,6 +35,7 @@ class DashboardController extends Controller
                 });
             })
             ->when($status === 'blocked', fn ($query) => $query->where('blocked', true))
+            ->when($hideBlocked, fn ($query) => $query->where('blocked', false))
             ->when($status && $status !== 'blocked', fn ($query) => $query->where('status', $status))
             ->when(! filled($search) && ! filled($status), fn ($query) => $query->where('status', '!=', 'clear'))
             ->orderByDesc('blocked')
@@ -54,6 +56,7 @@ class DashboardController extends Controller
         return view('voteguard::admin.index', [
             'search' => $search,
             'status' => $status,
+            'hideBlocked' => $hideBlocked,
             'filterFrom' => $periodFrom->toDateString(),
             'filterTo' => $periodTo->toDateString(),
             'periodIsDefault' => $periodFrom->equalTo($defaultFrom) && $periodTo->isSameDay($defaultTo),
