@@ -40,6 +40,7 @@ return [
     'open_player_help' => 'Même un joueur non signalé (toi, un staff, un test). Ensuite tu peux bloquer ses votes.',
     'player_not_found' => 'Aucun compte Azuriom avec ce pseudo.',
     'filters' => 'Filtres',
+    'period_help' => 'Avec les deux dates, la liste ne garde que les joueurs qui ont voté dans cette période.',
     'reset' => 'Réinitialiser',
     'all_status' => 'Tous',
     'filter_site' => 'Tous les sites',

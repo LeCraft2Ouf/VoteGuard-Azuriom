@@ -5,13 +5,16 @@ namespace Azuriom\Plugin\VoteGuard\Controllers\Admin;
 use Azuriom\Http\Controllers\Controller;
 use Azuriom\Models\ActionLog;
 use Azuriom\Models\User;
+use Azuriom\Plugin\Vote\Models\Vote;
 use Azuriom\Plugin\VoteGuard\Detector;
 use Azuriom\Plugin\VoteGuard\Models\Suspect;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Throwable;
 
 class DashboardController extends Controller
 {
@@ -19,8 +22,9 @@ class DashboardController extends Controller
     {
         $search = $request->input('search');
         $status = $request->input('status');
+        [$periodFrom, $periodTo] = $this->listPeriod($request);
 
-        $suspects = Suspect::query()
+        $suspects = $this->votedInPeriod(Suspect::query(), $periodFrom, $periodTo)
             ->with('user')
             ->when($search, function ($query, string $search) {
                 $query->whereHas('user', function ($userQuery) use ($search) {
@@ -48,14 +52,16 @@ class DashboardController extends Controller
         return view('voteguard::admin.index', [
             'search' => $search,
             'status' => $status,
+            'filterFrom' => $periodFrom?->toDateString() ?? '',
+            'filterTo' => $periodTo?->toDateString() ?? '',
             'scanFrom' => $request->input('from', now()->subDays(60)->toDateString()),
             'scanTo' => $request->input('to', now()->toDateString()),
             'suspects' => $suspects,
-            'countLikely' => Suspect::query()->where('status', 'likely')->count(),
-            'countSuspect' => Suspect::query()->where('status', 'suspect')->count(),
-            'countWatch' => Suspect::query()->where('status', 'watch')->count(),
-            'countClear' => Suspect::query()->where('status', 'clear')->count(),
-            'countBlocked' => Suspect::query()->where('blocked', true)->count(),
+            'countLikely' => $this->votedInPeriod(Suspect::query(), $periodFrom, $periodTo)->where('status', 'likely')->count(),
+            'countSuspect' => $this->votedInPeriod(Suspect::query(), $periodFrom, $periodTo)->where('status', 'suspect')->count(),
+            'countWatch' => $this->votedInPeriod(Suspect::query(), $periodFrom, $periodTo)->where('status', 'watch')->count(),
+            'countClear' => $this->votedInPeriod(Suspect::query(), $periodFrom, $periodTo)->where('status', 'clear')->count(),
+            'countBlocked' => $this->votedInPeriod(Suspect::query(), $periodFrom, $periodTo)->where('blocked', true)->count(),
             'unlisted' => $unlisted,
         ]);
     }
@@ -108,5 +114,45 @@ class DashboardController extends Controller
             'suspect' => $result['suspect'] ?? 0,
             'watch' => $result['watch'] ?? 0,
         ]));
+    }
+
+    /**
+     * @return array{0: ?Carbon, 1: ?Carbon}
+     */
+    private function listPeriod(Request $request): array
+    {
+        if (! $request->filled('from') || ! $request->filled('to')) {
+            return [null, null];
+        }
+
+        try {
+            $from = Carbon::parse($request->input('from'))->startOfDay();
+            $to = Carbon::parse($request->input('to'))->endOfDay();
+        } catch (Throwable) {
+            return [null, null];
+        }
+
+        if ($from->greaterThan($to)) {
+            [$from, $to] = [$to->copy()->startOfDay(), $from->copy()->endOfDay()];
+        }
+
+        return [$from, $to];
+    }
+
+    private function votedInPeriod(Builder $query, ?Carbon $from, ?Carbon $to): Builder
+    {
+        if ($from === null || $to === null || ! class_exists(Vote::class)) {
+            return $query;
+        }
+
+        $votes = (new Vote())->getTable();
+        $suspects = $query->getModel()->getTable();
+
+        return $query->whereExists(function ($sub) use ($votes, $suspects, $from, $to) {
+            $sub->selectRaw('1')
+                ->from($votes)
+                ->whereColumn($votes.'.user_id', $suspects.'.user_id')
+                ->whereBetween($votes.'.created_at', [$from, $to]);
+        });
     }
 }

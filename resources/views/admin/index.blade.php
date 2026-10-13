@@ -25,7 +25,7 @@
             ['key' => 'blocked', 'count' => $countBlocked, 'border' => 'border-dark'],
         ] as $stat)
             <div class="col-6 col-xl">
-                <a href="{{ route('voteguard.admin.index', array_filter(['status' => $status === $stat['key'] ? null : $stat['key'], 'search' => $search])) }}"
+                <a href="{{ route('voteguard.admin.index', array_filter(['status' => $status === $stat['key'] ? null : $stat['key'], 'search' => $search, 'from' => $filterFrom, 'to' => $filterTo])) }}"
                    class="vg-stat {{ $status === $stat['key'] ? 'is-active' : '' }}">
                     <div class="card {{ $stat['border'] }}">
                         <div class="card-body">
@@ -60,9 +60,20 @@
                                 @endforeach
                             </select>
                         </div>
+                        <div class="col-sm-6">
+                            <label class="form-label" for="filter-from">{{ trans('voteguard::admin.scan.from') }}</label>
+                            <input type="date" class="form-control" id="filter-from" name="from" value="{{ $filterFrom }}">
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label" for="filter-to">{{ trans('voteguard::admin.scan.to') }}</label>
+                            <input type="date" class="form-control" id="filter-to" name="to" value="{{ $filterTo }}">
+                        </div>
+                        <div class="col-12">
+                            <div class="form-text">{{ trans('voteguard::admin.period_help') }}</div>
+                        </div>
                         <div class="col-12 d-flex gap-2">
                             <button type="submit" class="btn btn-primary">{{ trans('messages.actions.search') }}</button>
-                            @if ($search || $status)
+                            @if ($search || $status || $filterFrom || $filterTo)
                                 <a href="{{ route('voteguard.admin.index') }}" class="btn btn-outline-secondary">
                                     {{ trans('voteguard::admin.reset') }}
                                 </a>
@@ -198,7 +209,7 @@
                     @empty
                         <tr>
                             <td colspan="6" class="text-center text-muted py-4">
-                                {{ ($search || $status) ? trans('voteguard::admin.empty_filter') : trans('voteguard::admin.empty') }}
+                                {{ ($search || $status || $filterFrom || $filterTo) ? trans('voteguard::admin.empty_filter') : trans('voteguard::admin.empty') }}
                             </td>
                         </tr>
                     @endforelse

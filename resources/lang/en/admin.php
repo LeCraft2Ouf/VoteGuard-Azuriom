@@ -40,6 +40,7 @@ return [
     'open_player_help' => 'Works even if the player is not flagged. You can then block their votes.',
     'player_not_found' => 'No Azuriom account with that name.',
     'filters' => 'Filters',
+    'period_help' => 'With both dates set, the list only keeps players who voted in that range.',
     'reset' => 'Reset',
     'all_status' => 'All',
     'filter_site' => 'All sites',
